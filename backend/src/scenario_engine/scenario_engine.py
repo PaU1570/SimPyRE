@@ -55,22 +55,16 @@ from src.models.scenario_model import ScenarioModel
 from src.scenario_engine.historical_data_loader import load_historical_dataset
 
 
-# ------------------------------------------------------------------ #
-# Scenario type enum (kept for convenience / string mapping)
-# ------------------------------------------------------------------ #
-
 class ScenarioType(str, Enum):
     """Enumeration of scenario types."""
+
     HISTORICAL = "historical"
     MONTE_CARLO = "monte_carlo"
 
 
-# ------------------------------------------------------------------ #
-# Per-type configuration classes
-# ------------------------------------------------------------------ #
-
 class _ScenarioConfigBase(BaseModel):
     """Fields shared by every scenario configuration."""
+
     model_config = {"extra": "forbid"}
 
     scenario_years: int
@@ -93,6 +87,7 @@ class HistoricalScenarioConfig(_ScenarioConfigBase):
         Whether blocks are placed in random order (``True``) or cycled
         in their original chronological order (``False``).
     """
+
     scenario_type: Literal[ScenarioType.HISTORICAL] = ScenarioType.HISTORICAL
     country: str = "spain"
     chunk_years: int | None = 1
@@ -112,6 +107,7 @@ class MonteCarloScenarioConfig(_ScenarioConfigBase):
     All distribution parameters default to long-run global equity/bond
     averages expressed as decimals.
     """
+
     scenario_type: Literal[ScenarioType.MONTE_CARLO] = ScenarioType.MONTE_CARLO
     mean_stock_return: float = 0.07
     std_stock_return: float = 0.15
@@ -222,12 +218,18 @@ class MonteCarloScenarioEngine(ScenarioEngine):
     """
 
     def generate_scenario(self, config: MonteCarloScenarioConfig) -> ScenarioModel:
-        stock_returns = [random.gauss(config.mean_stock_return, config.std_stock_return)
-                         for _ in range(config.scenario_years)]
-        bond_returns = [random.gauss(config.mean_bond_return, config.std_bond_return)
-                        for _ in range(config.scenario_years)]
-        inflation_rates = [random.gauss(config.mean_inflation, config.std_inflation)
-                           for _ in range(config.scenario_years)]
+        stock_returns = [
+            random.gauss(config.mean_stock_return, config.std_stock_return)
+            for _ in range(config.scenario_years)
+        ]
+        bond_returns = [
+            random.gauss(config.mean_bond_return, config.std_bond_return)
+            for _ in range(config.scenario_years)
+        ]
+        inflation_rates = [
+            random.gauss(config.mean_inflation, config.std_inflation)
+            for _ in range(config.scenario_years)
+        ]
         return ScenarioModel(
             scenario_years=config.scenario_years,
             stock_returns=stock_returns,

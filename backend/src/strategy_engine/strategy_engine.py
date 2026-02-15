@@ -4,8 +4,9 @@ Strategy engine module - defines withdrawal strategies and portfolio rebalancing
 
 from abc import ABC, abstractmethod
 from enum import Enum
+from typing import Annotated, Generic, Literal, Tuple, TypeVar, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.models.portfolio_model import Allocation, PortfolioModel
 from src.models.scenario_model import MarketData
@@ -13,24 +14,64 @@ from src.models.scenario_model import MarketData
 
 class StrategyType(str, Enum):
     """Enumeration of supported withdrawal strategies."""
+
     FIXED_SWR = "fixed_swr"
 
 
-class StrategyConfig(BaseModel):
-    """Configuration for a withdrawal strategy."""
-    strategy_type: StrategyType
-    # For FIXED_SWR:
+class StrategyType(str, Enum):
+    """Enumeration of supported withdrawal strategies."""
+
+    FIXED_SWR = "fixed_swr"
+
+
+class _StrategyConfigBase(BaseModel):
+    """Fields shared by every strategy configuration."""
+
+    model_config = {"extra": "forbid"}
+    minimum_withdrawal: float
+
+
+class FixedSWRStrategyConfig(_StrategyConfigBase):
+    """Configuration for a fixed safe withdrawal rate (SWR) strategy.
+
+    This strategy withdraws a fixed percentage of the initial portfolio value every year.
+
+    Parameters
+    ----------
+    withdrawal_rate: float
+        The fixed withdrawal rate (e.g., 0.04 for 4% SWR).
+    """
+
+    strategy_type: Literal[StrategyType.FIXED_SWR] = StrategyType.FIXED_SWR
     withdrawal_rate: float = 0.04  # e.g., 4% SWR
+
+
+# ------------------------------------------------------------------ #
+# Discriminated union  –  use this as the type annotation everywhere
+# ------------------------------------------------------------------ #
+StrategyConfig = Annotated[
+    Union[FixedSWRStrategyConfig], Field(discriminator="strategy_type")
+]
+"""
+A ``StrategyConfig`` is either a FixedSWRStrategyConfig or (in the future) other strategy configs, discriminated on the `strategy_type` field.
+
+Pydantic will automatically pick the right subclass when deserializing
+from a dict / JSON based on the value of ``strategy_type``.
+"""
 
 
 class StrategyResult(BaseModel):
     """Outcome of applying a strategy for a single year."""
+
     gross_withdrawal: float
     portfolio_before: PortfolioModel
     portfolio_after: PortfolioModel
 
 
-class StrategyEngine(ABC):
+_ConfigT = TypeVar("_ConfigT", bound=_StrategyConfigBase)
+
+
+class StrategyEngine(ABC, Generic[_ConfigT]):
     """Abstract base class for withdrawal-strategy engines."""
 
     @abstractmethod
@@ -38,7 +79,7 @@ class StrategyEngine(ABC):
         self,
         portfolio: PortfolioModel,
         market_data: MarketData,
-        config: StrategyConfig,
+        config: _ConfigT,
     ) -> StrategyResult:
         """
         Apply market returns and withdrawal logic for a single year.
@@ -52,6 +93,17 @@ class StrategyEngine(ABC):
         :return: StrategyResult summarising what happened.
         """
         pass
+
+    def _apply_minimum_withdrawal(
+        self, portfolio_value: float, withdrawal: float, minimum_withdrawal: float
+    ) -> Tuple[float, float]:
+        """Ensure the withdrawal is at least the minimum specified."""
+        if withdrawal < minimum_withdrawal:
+            withdrawal = min(
+                minimum_withdrawal, portfolio_value
+            )  # can't withdraw more than the portfolio value
+        portfolio_value = max(0.0, portfolio_value - withdrawal)
+        return withdrawal, portfolio_value
 
 
 class FixedSWRStrategy(StrategyEngine):
@@ -68,20 +120,24 @@ class FixedSWRStrategy(StrategyEngine):
         self,
         portfolio: PortfolioModel,
         market_data: MarketData,
-        config: StrategyConfig,
+        config: FixedSWRStrategyConfig,
     ) -> StrategyResult:
         portfolio_before = portfolio.portfolio_value
 
         # Fixed-rate withdrawal on the grown portfolio
         withdrawal = portfolio_before * config.withdrawal_rate
-        portfolio_after = max(0.0, portfolio_before - withdrawal)
+        withdrawal, portfolio_after = self._apply_minimum_withdrawal(
+            portfolio_before, withdrawal, config.minimum_withdrawal
+        )
 
         return StrategyResult(
             gross_withdrawal=withdrawal,
             portfolio_before=PortfolioModel(
-                portfolio_value=portfolio_before, allocation=portfolio.allocation),
+                portfolio_value=portfolio_before, allocation=portfolio.allocation
+            ),
             portfolio_after=PortfolioModel(
-                portfolio_value=portfolio_after, allocation=portfolio.allocation),  # keep same allocation
+                portfolio_value=portfolio_after, allocation=portfolio.allocation
+            ),  # keep same allocation
         )
 
 
