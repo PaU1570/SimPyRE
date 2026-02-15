@@ -31,8 +31,10 @@ from src.report_engine.report_engine import (
 # Configuration & Result models
 # ------------------------------------------------------------------ #
 
+
 class SimulationConfig(BaseModel):
-    """Master configuration – aggregates every sub-engine config."""
+    """Master configuration - aggregates every sub-engine config."""
+
     initial_portfolio: PortfolioModel
     scenario_config: ScenarioConfig
     strategy_config: StrategyConfig
@@ -40,11 +42,11 @@ class SimulationConfig(BaseModel):
     report_config: ReportConfig = ReportConfig()
     simulation_years: int
     num_simulations: int = 1
-    target_income: float = 0.0  # desired annual net income
 
 
 class SimulationResult(BaseModel):
     """Aggregate result across all simulation runs."""
+
     config: SimulationConfig
     reports: list[SimulationReport]
 
@@ -70,6 +72,7 @@ class SimulationResult(BaseModel):
 # Engine ABC & concrete implementation
 # ------------------------------------------------------------------ #
 
+
 class SimulationEngine(ABC):
     @abstractmethod
     def run_simulation(self, config: SimulationConfig) -> SimulationResult:
@@ -81,7 +84,12 @@ class SimulationEngine(ABC):
         """
         pass
 
-    def _apply_returns(self, portfolio: PortfolioModel, market_data: MarketData, rebalance: bool = False) -> PortfolioModel:
+    def _apply_returns(
+        self,
+        portfolio: PortfolioModel,
+        market_data: MarketData,
+        rebalance: bool = False,
+    ) -> PortfolioModel:
         """Apply market returns to the portfolio and return the new value."""
         stock_new = portfolio.stocks_value * (1 + market_data.stock_return)
         bond_new = portfolio.bonds_value * (1 + market_data.bond_return)
@@ -107,27 +115,35 @@ class SimpleSimulationEngine(SimulationEngine):
 
     def run_simulation(self, config: SimulationConfig) -> SimulationResult:
         # Resolve sub-engines
-        scenario_engine = ScenarioEngineFactory.create_scenario_engine(config.scenario_config)
-        strategy_engine = StrategyEngineFactory.create_strategy_engine(config.strategy_config)
+        scenario_engine = ScenarioEngineFactory.create_scenario_engine(
+            config.scenario_config
+        )
+        strategy_engine = StrategyEngineFactory.create_strategy_engine(
+            config.strategy_config
+        )
         tax_engine = TaxEngineFactory.create_tax_engine(config.tax_config)
 
         reports: list[SimulationReport] = []
 
         for _ in range(config.num_simulations):
-            scenario: ScenarioModel = scenario_engine.generate_scenario(config.scenario_config)
+            scenario: ScenarioModel = scenario_engine.generate_scenario(
+                config.scenario_config
+            )
 
             portfolio = PortfolioModel(
                 portfolio_value=config.initial_portfolio.portfolio_value,
-                allocation=Allocation(**config.initial_portfolio.allocation.model_dump()),
+                allocation=Allocation(
+                    **config.initial_portfolio.allocation.model_dump()
+                ),
             )
 
             yearly_records: list[YearRecord] = []
-            cumulative_inflation = 1.0
-
             for md in scenario.get_market_data():
                 # 1. Strategy: apply returns & withdraw
                 new_portfolio = self._apply_returns(portfolio, md, rebalance=False)
-                strategy_result = strategy_engine.execute_strategy(new_portfolio, md, config.strategy_config)
+                strategy_result = strategy_engine.execute_strategy(
+                    new_portfolio, md, config.strategy_config
+                )
 
                 # 2. Tax: compute taxes on withdrawal
                 tax_result = tax_engine.calculate_tax(
@@ -135,10 +151,7 @@ class SimpleSimulationEngine(SimulationEngine):
                     wealth=strategy_result.portfolio_after.portfolio_value,
                 )
 
-                # 3. Track inflation for real values
-                cumulative_inflation *= (1 + md.inflation_rate)
-
-                # 4. Record the year
+                # 3. Record the year
                 yearly_records.append(
                     YearRecord(
                         year=md.year_index + 1,
@@ -148,14 +161,23 @@ class SimpleSimulationEngine(SimulationEngine):
                         capital_gains_tax=tax_result.capital_gains_tax,
                         wealth_tax=tax_result.wealth_tax,
                         inflation_rate=md.inflation_rate,
-                        real_portfolio_value=strategy_result.portfolio_after.portfolio_value / cumulative_inflation,
+                        real_portfolio_value=strategy_result.portfolio_after.portfolio_value
+                        / md.cumulative_inflation,
+                        real_gross_income=strategy_result.gross_withdrawal
+                        / md.cumulative_inflation,
+                        real_net_income=tax_result.net_income / md.cumulative_inflation,
+                        real_capital_gains_tax=tax_result.capital_gains_tax
+                        / md.cumulative_inflation,
+                        real_wealth_tax=tax_result.wealth_tax / md.cumulative_inflation,
                     )
                 )
 
                 # 5. Update portfolio state for next year
                 portfolio = strategy_result.portfolio_after
 
-            report = ReportEngine.generate_report(yearly_records, config.target_income)
+            report = ReportEngine.generate_report(
+                yearly_records, config.strategy_config.minimum_withdrawal
+            )
             reports.append(report)
 
         return SimulationResult(config=config, reports=reports)

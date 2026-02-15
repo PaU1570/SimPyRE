@@ -7,13 +7,22 @@ interface YearlyTableProps {
 
 export default function YearlyTable({ records }: YearlyTableProps) {
   const [expanded, setExpanded] = useState(false);
+  const [realMode, setRealMode] = useState(false);
   const display = expanded ? records : records.slice(0, 10);
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold text-gray-700">
-        Year-by-Year Breakdown
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-700">
+          Year-by-Year Breakdown
+        </h3>
+        <button
+          onClick={() => setRealMode((v) => !v)}
+          className="inline-flex items-center rounded-md border border-gray-300 bg-gray-50 px-3 py-1 text-xs font-medium transition-colors hover:bg-gray-100"
+        >
+          {realMode ? "Show nominal" : "Show real"}
+        </button>
+      </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200">
         <table className="min-w-full text-xs">
@@ -26,20 +35,20 @@ export default function YearlyTable({ records }: YearlyTableProps) {
               <Th>CG Tax</Th>
               <Th>Wealth Tax</Th>
               <Th>Inflation</Th>
-              <Th>Real Portfolio</Th>
+              {!realMode && <Th>Real Portfolio</Th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {display.map((r) => (
               <tr key={r.year} className="hover:bg-gray-50/50">
                 <Td>{r.year}</Td>
-                <Td>{eur(r.portfolio_value)}</Td>
-                <Td>{eur(r.gross_income)}</Td>
-                <Td>{eur(r.net_income)}</Td>
-                <Td>{eur(r.capital_gains_tax)}</Td>
-                <Td>{eur(r.wealth_tax)}</Td>
+                <Td>{eur(realMode ? r.real_portfolio_value : r.portfolio_value)}</Td>
+                <Td>{eur(realMode ? r.real_gross_income : r.gross_income)}</Td>
+                <Td>{eur(realMode ? r.real_net_income : r.net_income)}</Td>
+                <Td>{eur(realMode ? r.real_capital_gains_tax : r.capital_gains_tax)}</Td>
+                <Td>{eur(realMode ? r.real_wealth_tax : r.wealth_tax)}</Td>
                 <Td>{pct(r.inflation_rate)}</Td>
-                <Td>{eur(r.real_portfolio_value)}</Td>
+                {!realMode && <Td>{eur(r.real_portfolio_value)}</Td>}
               </tr>
             ))}
           </tbody>

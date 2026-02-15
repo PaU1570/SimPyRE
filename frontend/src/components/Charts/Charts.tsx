@@ -71,7 +71,7 @@ function buildBands(reports: SimulationReport[]) {
     median_real: number;
     p75_real: number;
     p90_real: number;
-    // income
+    // income (nominal)
     gross_p10: number;
     gross_p25: number;
     gross_median: number;
@@ -82,6 +82,17 @@ function buildBands(reports: SimulationReport[]) {
     net_median: number;
     net_p75: number;
     net_p90: number;
+    // income (real)
+    rgross_p10: number;
+    rgross_p25: number;
+    rgross_median: number;
+    rgross_p75: number;
+    rgross_p90: number;
+    rnet_p10: number;
+    rnet_p25: number;
+    rnet_median: number;
+    rnet_p75: number;
+    rnet_p90: number;
   }> = [];
 
   for (let y = 0; y < maxYears; y++) {
@@ -89,6 +100,8 @@ function buildBands(reports: SimulationReport[]) {
     const realVals = reports.map((r) => r.yearly_records[y]?.real_portfolio_value).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
     const grossVals = reports.map((r) => r.yearly_records[y]?.gross_income).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
     const netVals = reports.map((r) => r.yearly_records[y]?.net_income).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+    const rGrossVals = reports.map((r) => r.yearly_records[y]?.real_gross_income).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+    const rNetVals = reports.map((r) => r.yearly_records[y]?.real_net_income).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
 
     if (vals.length === 0) continue;
 
@@ -114,35 +127,52 @@ function buildBands(reports: SimulationReport[]) {
       net_median: pctile(netVals, 0.5),
       net_p75: pctile(netVals, 0.75),
       net_p90: pctile(netVals, 0.9),
+      rgross_p10: pctile(rGrossVals, 0.1),
+      rgross_p25: pctile(rGrossVals, 0.25),
+      rgross_median: pctile(rGrossVals, 0.5),
+      rgross_p75: pctile(rGrossVals, 0.75),
+      rgross_p90: pctile(rGrossVals, 0.9),
+      rnet_p10: pctile(rNetVals, 0.1),
+      rnet_p25: pctile(rNetVals, 0.25),
+      rnet_median: pctile(rNetVals, 0.5),
+      rnet_p75: pctile(rNetVals, 0.75),
+      rnet_p90: pctile(rNetVals, 0.9),
     });
   }
   return data;
 }
 
-/** Build histogram with €5k bins up to €100k, then one overflow bin. Real values. */
+/** Build histogram with €5k bins up to €100k, then one overflow bin. */
 function buildHistogram5k(values: number[]) {
+  return buildHistogram(values, 5_000, 100_000);
+}
+
+/** Build histogram with €250k bins up to €10M, then one overflow bin. */
+function buildHistogram250k(values: number[]) {
+  return buildHistogram(values, 250_000, 10_000_000);
+}
+
+function buildHistogram(values: number[], binWidth: number, maxBin: number) {
   if (values.length === 0) return [];
 
-  const BIN_WIDTH = 5_000;
-  const MAX_BIN = 100_000;
-  const numBins = MAX_BIN / BIN_WIDTH; // 20 bins from 0–100k
+  const numBins = maxBin / binWidth;
 
   type Bin = { binStart: number; binEnd: number; count: number; label: string };
   const bins: Bin[] = Array.from({ length: numBins }, (_, i) => ({
-    binStart: i * BIN_WIDTH,
-    binEnd: (i + 1) * BIN_WIDTH,
+    binStart: i * binWidth,
+    binEnd: (i + 1) * binWidth,
     count: 0,
-    label: `€${(i * BIN_WIDTH) / 1_000}k`,
+    label: fmtEur(i * binWidth),
   }));
 
   // overflow bin
-  bins.push({ binStart: MAX_BIN, binEnd: Infinity, count: 0, label: ">€100k" });
+  bins.push({ binStart: maxBin, binEnd: Infinity, count: 0, label: `>${fmtEur(maxBin)}` });
 
   for (const v of values) {
-    if (v >= MAX_BIN) {
+    if (v >= maxBin) {
       bins[numBins]!.count++;
     } else {
-      const idx = Math.max(0, Math.min(numBins - 1, Math.floor(v / BIN_WIDTH)));
+      const idx = Math.max(0, Math.min(numBins - 1, Math.floor(v / binWidth)));
       bins[idx]!.count++;
     }
   }
@@ -285,8 +315,10 @@ const histTooltipValue = (v: number) => [v, "Count"] as [number, string];
 export default function Charts({ reports }: ChartsProps) {
   const [portfolioMode, setPortfolioMode] = useState<"nominal" | "real">("nominal");
   const [incomeMode, setIncomeMode] = useState<"gross" | "net">("gross");
+  const [incomeRealNom, setIncomeRealNom] = useState<"nominal" | "real">("nominal");
   const [portfolioHistMode, setPortfolioHistMode] = useState<"nominal" | "real">("real");
   const [incomeHistMode, setIncomeHistMode] = useState<"gross" | "net">("net");
+  const [incomeHistRealNom, setIncomeHistRealNom] = useState<"nominal" | "real">("real");
 
   const bands = buildBands(reports);
 
@@ -298,10 +330,14 @@ export default function Charts({ reports }: ChartsProps) {
       ? { medianKey: "median", p75Key: "p75", p25Key: "p25", p90Key: "p90", p10Key: "p10" }
       : { medianKey: "median_real", p75Key: "p75_real", p25Key: "p25_real", p90Key: "p90_real", p10Key: "p10_real" };
 
-  const incomeKeys =
-    incomeMode === "gross"
-      ? { medianKey: "gross_median", p75Key: "gross_p75", p25Key: "gross_p25", p90Key: "gross_p90", p10Key: "gross_p10" }
-      : { medianKey: "net_median", p75Key: "net_p75", p25Key: "net_p25", p90Key: "net_p90", p10Key: "net_p10" };
+  const prefix = incomeRealNom === "real" ? (incomeMode === "gross" ? "rgross" : "rnet") : (incomeMode === "gross" ? "gross" : "net");
+  const incomeKeys = {
+    medianKey: `${prefix}_median`,
+    p75Key: `${prefix}_p75`,
+    p25Key: `${prefix}_p25`,
+    p90Key: `${prefix}_p90`,
+    p10Key: `${prefix}_p10`,
+  };
 
   const incomeColor = incomeMode === "gross" ? "#d97706" : "#16a34a";
 
@@ -310,9 +346,15 @@ export default function Charts({ reports }: ChartsProps) {
   const finalReal = reports.map((r) => r.final_real_portfolio_value);
   const allGross = reports.flatMap((r) => r.yearly_records.map((y) => y.gross_income));
   const allNet = reports.flatMap((r) => r.yearly_records.map((y) => y.net_income));
+  const allRealGross = reports.flatMap((r) => r.yearly_records.map((y) => y.real_gross_income));
+  const allRealNet = reports.flatMap((r) => r.yearly_records.map((y) => y.real_net_income));
 
-  const histPortfolio = buildHistogram5k(portfolioHistMode === "nominal" ? finalNominal : finalReal);
-  const histIncome = buildHistogram5k(incomeHistMode === "gross" ? allGross : allNet);
+  const histPortfolio = buildHistogram250k(portfolioHistMode === "nominal" ? finalNominal : finalReal);
+  const incomeHistValues =
+    incomeHistRealNom === "real"
+      ? (incomeHistMode === "gross" ? allRealGross : allRealNet)
+      : (incomeHistMode === "gross" ? allGross : allNet);
+  const histIncome = buildHistogram5k(incomeHistValues);
 
   const portfolioHistColor = portfolioHistMode === "nominal" ? "#60a5fa" : "#4ade80";
   const incomeHistColor = incomeHistMode === "gross" ? "#fbbf24" : "#4ade80";
@@ -360,16 +402,26 @@ export default function Charts({ reports }: ChartsProps) {
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-700">
-            Income Over Time – {incomeMode === "gross" ? "Gross" : "Net"}
+            Income Over Time – {incomeMode === "gross" ? "Gross" : "Net"}{incomeRealNom === "real" ? " (Real)" : ""}
           </h3>
-          <Toggle
-            options={[
-              { value: "gross" as const, label: "Gross" },
-              { value: "net" as const, label: "Net" },
-            ]}
-            value={incomeMode}
-            onChange={setIncomeMode}
-          />
+          <div className="flex gap-2">
+            <Toggle
+              options={[
+                { value: "gross" as const, label: "Gross" },
+                { value: "net" as const, label: "Net" },
+              ]}
+              value={incomeMode}
+              onChange={setIncomeMode}
+            />
+            <Toggle
+              options={[
+                { value: "nominal" as const, label: "Nominal" },
+                { value: "real" as const, label: "Real" },
+              ]}
+              value={incomeRealNom}
+              onChange={setIncomeRealNom}
+            />
+          </div>
         </div>
         <PortfolioFanChart
           data={bands}
@@ -414,16 +466,26 @@ export default function Charts({ reports }: ChartsProps) {
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-700">
-            Distribution of Yearly Income – {incomeHistMode === "gross" ? "Gross" : "Net"}
+            Distribution of Yearly Income – {incomeHistMode === "gross" ? "Gross" : "Net"}{incomeHistRealNom === "real" ? " (Real)" : ""}
           </h3>
-          <Toggle
-            options={[
-              { value: "gross" as const, label: "Gross" },
-              { value: "net" as const, label: "Net" },
-            ]}
-            value={incomeHistMode}
-            onChange={setIncomeHistMode}
-          />
+          <div className="flex gap-2">
+            <Toggle
+              options={[
+                { value: "gross" as const, label: "Gross" },
+                { value: "net" as const, label: "Net" },
+              ]}
+              value={incomeHistMode}
+              onChange={setIncomeHistMode}
+            />
+            <Toggle
+              options={[
+                { value: "nominal" as const, label: "Nominal" },
+                { value: "real" as const, label: "Real" },
+              ]}
+              value={incomeHistRealNom}
+              onChange={setIncomeHistRealNom}
+            />
+          </div>
         </div>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={histIncome}>

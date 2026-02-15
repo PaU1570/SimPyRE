@@ -15,7 +15,7 @@ const DEFAULT_CONFIG: SimulationConfigPayload = {
   },
   scenario_config: {
     scenario_type: "historical",
-    scenario_years: 30,
+    scenario_years: 50,
     country: "spain",
     chunk_years: 1,
     shuffle: true,
@@ -23,15 +23,14 @@ const DEFAULT_CONFIG: SimulationConfigPayload = {
   strategy_config: {
     strategy_type: "fixed_swr",
     withdrawal_rate: 0.04,
-    minimum_withdrawal: 0,
+    minimum_withdrawal: 20000,
   },
   tax_config: {
     country: "spain",
-    region: "default",
+    region: "biscay",
   },
   simulation_years: 30,
   num_simulations: 100,
-  target_income: 20_000,
 };
 
 // ── Props ────────────────────────────────────────────────────────
@@ -179,16 +178,6 @@ export default function ConfigForm({
             />
           </Field>
         </div>
-        <Field label="Target annual income (€)">
-          <input
-            type="number"
-            className={inputCls}
-            min={0}
-            step={500}
-            value={config.target_income}
-            onChange={(e) => set("target_income", Number(e.target.value))}
-          />
-        </Field>
       </Section>
 
       {/* ── Scenario ──────────────────────────────────────────── */}

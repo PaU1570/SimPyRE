@@ -3,6 +3,7 @@ from pydantic import BaseModel, field_validator, model_validator
 
 class Allocation(BaseModel):
     """Asset allocation as percentages (0–1) that must sum to 1."""
+
     stocks: float
     bonds: float
     cash: float
@@ -24,21 +25,30 @@ class Allocation(BaseModel):
 
 class PortfolioModel(BaseModel):
     """Model representing a financial portfolio."""
+
     portfolio_value: float
     allocation: Allocation
 
     @classmethod
-    def from_values(cls, stocks_value: float, bonds_value: float, cash_value: float) -> "PortfolioModel":
+    def from_values(
+        cls, stocks_value: float, bonds_value: float, cash_value: float
+    ) -> "PortfolioModel":
         total = stocks_value + bonds_value + cash_value
-        if total == 0:
-            raise ValueError("total portfolio value cannot be zero")
+        if total < 0:
+            raise ValueError("total portfolio value cannot be less than 0")
         return cls(
             portfolio_value=total,
-            allocation=Allocation(
-                stocks=stocks_value / total,
-                bonds=bonds_value / total,
-                cash=cash_value / total,
-            )
+            allocation=(
+                Allocation(
+                    stocks=stocks_value / total,
+                    bonds=bonds_value / total,
+                    cash=cash_value / total,
+                )
+                if total > 0
+                else Allocation(
+                    stocks=0, bonds=0, cash=1
+                )  # arbitrary allocation to pass validation
+            ),
         )
 
     @property

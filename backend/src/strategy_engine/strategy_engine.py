@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Annotated, Generic, Literal, Tuple, TypeVar, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Tag
 
 from src.models.portfolio_model import Allocation, PortfolioModel
 from src.models.scenario_model import MarketData
@@ -16,16 +16,17 @@ class StrategyType(str, Enum):
     """Enumeration of supported withdrawal strategies."""
 
     FIXED_SWR = "fixed_swr"
-
-
-class StrategyType(str, Enum):
-    """Enumeration of supported withdrawal strategies."""
-
-    FIXED_SWR = "fixed_swr"
+    CONSTANT_DOLLAR = "constant_dollar"
 
 
 class _StrategyConfigBase(BaseModel):
-    """Fields shared by every strategy configuration."""
+    """Fields shared by every strategy configuration.
+
+    Parameters
+    ----------
+    minimum_withdrawal: float
+        The minimum withdrawal amount (in year-0 money).
+    """
 
     model_config = {"extra": "forbid"}
     minimum_withdrawal: float
@@ -46,14 +47,33 @@ class FixedSWRStrategyConfig(_StrategyConfigBase):
     withdrawal_rate: float = 0.04  # e.g., 4% SWR
 
 
+class ConstantDollarStrategyConfig(_StrategyConfigBase):
+    """Configuration for a constant-dollar withdrawal strategy.
+
+    This strategy withdraws a fixed dollar amount (adjusted for inflation) every year.
+
+    Parameters
+    ----------
+    withdrawal_amount: float
+        The fixed withdrawal amount in year-0 dollars.
+    """
+
+    strategy_type: Literal[StrategyType.CONSTANT_DOLLAR] = StrategyType.CONSTANT_DOLLAR
+    withdrawal_amount: float
+
+
 # ------------------------------------------------------------------ #
 # Discriminated union  –  use this as the type annotation everywhere
 # ------------------------------------------------------------------ #
 StrategyConfig = Annotated[
-    Union[FixedSWRStrategyConfig], Field(discriminator="strategy_type")
+    Union[
+        Annotated[FixedSWRStrategyConfig, Tag("fixed_swr")],
+        Annotated[ConstantDollarStrategyConfig, Tag("constant_dollar")],
+    ],
+    Field(discriminator="strategy_type"),
 ]
 """
-A ``StrategyConfig`` is either a FixedSWRStrategyConfig or (in the future) other strategy configs, discriminated on the `strategy_type` field.
+A ``StrategyConfig`` is one of the available strategy configs, discriminated on the `strategy_type` field.
 
 Pydantic will automatically pick the right subclass when deserializing
 from a dict / JSON based on the value of ``strategy_type``.
@@ -95,7 +115,10 @@ class StrategyEngine(ABC, Generic[_ConfigT]):
         pass
 
     def _apply_minimum_withdrawal(
-        self, portfolio_value: float, withdrawal: float, minimum_withdrawal: float
+        self,
+        portfolio_value: float,
+        withdrawal: float,
+        minimum_withdrawal: float,
     ) -> Tuple[float, float]:
         """Ensure the withdrawal is at least the minimum specified."""
         if withdrawal < minimum_withdrawal:
@@ -127,7 +150,10 @@ class FixedSWRStrategy(StrategyEngine):
         # Fixed-rate withdrawal on the grown portfolio
         withdrawal = portfolio_before * config.withdrawal_rate
         withdrawal, portfolio_after = self._apply_minimum_withdrawal(
-            portfolio_before, withdrawal, config.minimum_withdrawal
+            portfolio_before,
+            withdrawal,
+            config.minimum_withdrawal
+            * market_data.cumulative_inflation,  # adjust minimum withdrawal for inflation
         )
 
         return StrategyResult(

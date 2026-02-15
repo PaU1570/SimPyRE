@@ -78,7 +78,6 @@ export interface SimulationConfigPayload {
   report_config?: ReportConfig;
   simulation_years: number;
   num_simulations: number;
-  target_income: number;
 }
 
 // ── Response types ───────────────────────────────────────────────
@@ -92,6 +91,10 @@ export interface YearRecord {
   wealth_tax: number;
   inflation_rate: number;
   real_portfolio_value: number;
+  real_gross_income: number;
+  real_net_income: number;
+  real_capital_gains_tax: number;
+  real_wealth_tax: number;
 }
 
 export interface SimulationReport {

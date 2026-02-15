@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { SimulationResponse } from "@/types/simulation";
 
 interface ResultsPanelProps {
@@ -5,6 +6,7 @@ interface ResultsPanelProps {
 }
 
 export default function ResultsPanel({ data }: ResultsPanelProps) {
+  const [realMode, setRealMode] = useState(false);
   const { summary, reports } = data;
   const successPct = (summary.success_rate * 100).toFixed(1);
 
@@ -22,6 +24,8 @@ export default function ResultsPanel({ data }: ResultsPanelProps) {
   // ── Yearly income (flatten all years across all runs) ─────
   const allGross = reports.flatMap((r) => r.yearly_records.map((y) => y.gross_income));
   const allNet = reports.flatMap((r) => r.yearly_records.map((y) => y.net_income));
+  const allRealGross = reports.flatMap((r) => r.yearly_records.map((y) => y.real_gross_income));
+  const allRealNet = reports.flatMap((r) => r.yearly_records.map((y) => y.real_net_income));
 
   const grossMedian = pctile(allGross, 0.5);
   const grossP10 = pctile(allGross, 0.1);
@@ -29,6 +33,12 @@ export default function ResultsPanel({ data }: ResultsPanelProps) {
   const netMedian = pctile(allNet, 0.5);
   const netP10 = pctile(allNet, 0.1);
   const netP90 = pctile(allNet, 0.9);
+  const rGrossMedian = pctile(allRealGross, 0.5);
+  const rGrossP10 = pctile(allRealGross, 0.1);
+  const rGrossP90 = pctile(allRealGross, 0.9);
+  const rNetMedian = pctile(allRealNet, 0.5);
+  const rNetP10 = pctile(allRealNet, 0.1);
+  const rNetP90 = pctile(allRealNet, 0.9);
 
   const successColor =
     summary.success_rate >= 0.9
@@ -39,7 +49,10 @@ export default function ResultsPanel({ data }: ResultsPanelProps) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-gray-800">Results Summary</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-800">Results Summary</h2>
+        <Toggle value={realMode} onChange={setRealMode} />
+      </div>
 
       {/* Row 1 – Meta */}
       <div className="grid grid-cols-3 gap-3">
@@ -52,19 +65,62 @@ export default function ResultsPanel({ data }: ResultsPanelProps) {
         <SimpleCard label="Years" value={String(summary.simulation_years)} />
       </div>
 
-      {/* Row 2 – Final portfolio (nominal / real pairs) */}
+      {/* Row 2 – Final portfolio */}
       <div className="grid grid-cols-3 gap-3">
-        <DualCard label="Median final" nominal={medianFinal} real={medianFinalReal} />
-        <DualCard label="10th pctile" nominal={p10Final} real={p10FinalReal} />
-        <DualCard label="90th pctile" nominal={p90Final} real={p90FinalReal} />
+        <ValueCard label="Median final" value={realMode ? medianFinalReal : medianFinal} />
+        <ValueCard label="10th pctile" value={realMode ? p10FinalReal : p10Final} />
+        <ValueCard label="90th pctile" value={realMode ? p90FinalReal : p90Final} />
       </div>
 
-      {/* Row 3 – Yearly income (gross / net in same box) */}
+      {/* Row 3 – Yearly income (gross / net) */}
       <div className="grid grid-cols-3 gap-3">
-        <IncomeCard label="Median yearly income" gross={grossMedian} net={netMedian} />
-        <IncomeCard label="10th pctile income" gross={grossP10} net={netP10} />
-        <IncomeCard label="90th pctile income" gross={grossP90} net={netP90} />
+        <IncomeCard
+          label="Median yearly income"
+          gross={realMode ? rGrossMedian : grossMedian}
+          net={realMode ? rNetMedian : netMedian}
+        />
+        <IncomeCard
+          label="10th pctile income"
+          gross={realMode ? rGrossP10 : grossP10}
+          net={realMode ? rNetP10 : netP10}
+        />
+        <IncomeCard
+          label="90th pctile income"
+          gross={realMode ? rGrossP90 : grossP90}
+          net={realMode ? rNetP90 : netP90}
+        />
       </div>
+    </div>
+  );
+}
+
+// ── Toggle ───────────────────────────────────────────────────────
+
+function Toggle({
+  value,
+  onChange,
+}: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-md border border-gray-300 bg-gray-50 text-xs font-medium">
+      <button
+        onClick={() => onChange(false)}
+        className={`px-3 py-1 rounded-l-md transition-colors ${
+          !value ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
+        }`}
+      >
+        Nominal
+      </button>
+      <button
+        onClick={() => onChange(true)}
+        className={`px-3 py-1 rounded-r-md transition-colors ${
+          value ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
+        }`}
+      >
+        Real
+      </button>
     </div>
   );
 }
@@ -88,28 +144,17 @@ function SimpleCard({
   );
 }
 
-/** Shows nominal + real value (real in green, parenthesised). */
-function DualCard({
-  label,
-  nominal,
-  real,
-}: {
-  label: string;
-  nominal: number;
-  real: number;
-}) {
+/** Single-value portfolio card. */
+function ValueCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
       <p className="text-xs font-medium text-gray-500">{label}</p>
-      <p className="mt-1 text-base font-semibold leading-snug">
-        <span className="text-gray-900">{fmt(nominal)}</span>{" "}
-        <span className="text-green-600 text-sm">({fmt(real)})</span>
-      </p>
+      <p className="mt-1 text-base font-semibold text-gray-900">{fmt(value)}</p>
     </div>
   );
 }
 
-/** Shows gross + net income in the same box (amber / green). */
+/** Shows gross + net income in the same box. */
 function IncomeCard({
   label,
   gross,
