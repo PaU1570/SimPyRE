@@ -1,0 +1,66 @@
+{
+    "spain": {
+        "name": "Spain",
+        "regions": {
+            "biscay": {
+                "name": "Bizkaia",
+                "capital_gains_brackets": [
+                    {
+                        "bracket": 2500,
+                        "rate": 0.20
+                    },
+                    {
+                        "bracket": 10000,
+                        "rate": 0.21
+                    },
+                    {
+                        "bracket": 15000,
+                        "rate": 0.22
+                    },
+                    {
+                        "bracket": 30000,
+                        "rate": 0.23
+                    },
+                    {
+                        "bracket": null,
+                        "rate": 0.25
+                    }
+                ],
+                "wealth_tax_brackets": [
+                    {
+                        "bracket": 800000,
+                        "rate": 0.002
+                    },
+                    {
+                        "bracket": 1600000,
+                        "rate": 0.006
+                    },
+                    {
+                        "bracket": 3200000,
+                        "rate": 0.01
+                    },
+                    {
+                        "bracket": 6400000,
+                        "rate": 0.015
+                    },
+                    {
+                        "bracket": 12800000,
+                        "rate": 0.0175
+                    },
+                    {
+                        "bracket": null,
+                        "rate": 0.02
+                    }
+                ],
+                "wealth_tax_exemptions": {
+                    "primary_residence": 400000,
+                    "personal_allowance": 800000
+                },
+                "wealth_tax_cap": {
+                    "pct_of_taxable_income": 0.65,
+                    "discount_limit_pct": 0.75
+                }
+            }
+        }
+    }
+}
