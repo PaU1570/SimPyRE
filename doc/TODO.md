@@ -1,2 +1,2 @@
 [] Add option to rebalance portfolio.
-[] Use net income for minimum withdrawal.
+[] Support case where wealth tax exceeds income.

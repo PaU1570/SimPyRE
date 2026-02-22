@@ -36,6 +36,7 @@ class SimulationConfig(BaseModel):
     """Master configuration - aggregates every sub-engine config."""
 
     initial_portfolio: PortfolioModel
+    rebalance: bool
     scenario_config: ScenarioConfig
     strategy_config: StrategyConfig
     tax_config: TaxConfig
@@ -88,12 +89,12 @@ class SimulationEngine(ABC):
         self,
         portfolio: PortfolioModel,
         market_data: MarketData,
-        rebalance: bool = False,
+        rebalance: bool,
     ) -> PortfolioModel:
         """Apply market returns to the portfolio and return the new value."""
         stock_new = portfolio.stocks_value * (1 + market_data.stock_return)
         bond_new = portfolio.bonds_value * (1 + market_data.bond_return)
-        cash_new = portfolio.cash_value  # (TODO: add cash return)
+        cash_new = portfolio.cash_value * (1 + market_data.cash_return)
         if rebalance:
             return PortfolioModel(
                 portfolio_value=stock_new + bond_new + cash_new,
@@ -138,11 +139,15 @@ class SimpleSimulationEngine(SimulationEngine):
             )
 
             yearly_records: list[YearRecord] = []
+            market_data_history: list[MarketData] = []
             for md in scenario.get_market_data():
+                market_data_history.append(md)
                 # 1. Strategy: apply returns & withdraw
-                new_portfolio = self._apply_returns(portfolio, md, rebalance=False)
+                new_portfolio = self._apply_returns(
+                    portfolio, md, rebalance=config.rebalance
+                )
                 strategy_result = strategy_engine.execute_strategy(
-                    new_portfolio, md, config.strategy_config
+                    new_portfolio, market_data_history, config.strategy_config
                 )
 
                 # 2. Tax: compute taxes on withdrawal
@@ -169,6 +174,9 @@ class SimpleSimulationEngine(SimulationEngine):
                         real_capital_gains_tax=tax_result.capital_gains_tax
                         / md.cumulative_inflation,
                         real_wealth_tax=tax_result.wealth_tax / md.cumulative_inflation,
+                        stock_return=md.stock_return,
+                        bond_return=md.bond_return,
+                        cash_return=md.cash_return,
                     )
                 )
 
@@ -176,7 +184,7 @@ class SimpleSimulationEngine(SimulationEngine):
                 portfolio = strategy_result.portfolio_after
 
             report = ReportEngine.generate_report(
-                yearly_records, config.strategy_config.minimum_withdrawal
+                yearly_records, config.strategy_config.target_withdrawal
             )
             reports.append(report)
 

@@ -68,6 +68,7 @@ class _ScenarioConfigBase(BaseModel):
     model_config = {"extra": "forbid"}
 
     scenario_years: int
+    cash_return: float = 0.01  # (fixed) return on cash
 
 
 class HistoricalScenarioConfig(_ScenarioConfigBase):
@@ -86,12 +87,16 @@ class HistoricalScenarioConfig(_ScenarioConfigBase):
     shuffle : bool
         Whether blocks are placed in random order (``True``) or cycled
         in their original chronological order (``False``).
+    randomize_start : bool
+        Whether the starting point of the first block is randomised. Only
+        relevant when ``shuffle=False``, otherwise it has no effect since blocks are already randomised.
     """
 
     scenario_type: Literal[ScenarioType.HISTORICAL] = ScenarioType.HISTORICAL
     country: str = "spain"
     chunk_years: int | None = 1
     shuffle: bool = True
+    randomize_start: bool = False
 
     @model_validator(mode="after")
     def _validate_chunk_years(self) -> "HistoricalScenarioConfig":
@@ -187,6 +192,13 @@ class HistoricalScenarioEngine(ScenarioEngine):
             end = min(start + chunk, n_data)
             blocks.append(list(range(start, end)))
 
+        # Shift starting point
+        if config.randomize_start:
+            shift = random.randint(0, n_data - 1)
+            blocks = [
+                list(map(lambda i: (i + shift) % n_data, block)) for block in blocks
+            ]
+
         # Assemble indices for the requested number of years
         indices: list[int] = []
         if config.shuffle:
@@ -208,6 +220,9 @@ class HistoricalScenarioEngine(ScenarioEngine):
             scenario_years=config.scenario_years,
             stock_returns=[dataset.stock_returns[i] for i in indices],
             bond_returns=[dataset.bond_returns[i] for i in indices],
+            cash_returns=[
+                config.cash_return for _ in indices
+            ],  # (fixed cash return, not from dataset)
             inflation_rates=[dataset.inflation_rates[i] for i in indices],
         )
 
@@ -234,6 +249,9 @@ class MonteCarloScenarioEngine(ScenarioEngine):
             scenario_years=config.scenario_years,
             stock_returns=stock_returns,
             bond_returns=bond_returns,
+            cash_returns=[
+                config.cash_return for _ in range(config.scenario_years)
+            ],  # (fixed cash return, not from sampling)
             inflation_rates=inflation_rates,
         )
 

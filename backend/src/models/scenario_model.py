@@ -13,6 +13,7 @@ class MarketData:
     year_index: int
     stock_return: float
     bond_return: float
+    cash_return: float
     inflation_rate: float
     cumulative_inflation: float
 
@@ -27,11 +28,14 @@ class ScenarioModel(BaseModel):
     bond_returns: list[
         float
     ]  # Annual returns for bonds, as percentages (e.g., 0.03 for 3%)
+    cash_returns: list[
+        float
+    ]  # Annual returns for cash, as percentages (e.g., 0.01 for 1%)
     inflation_rates: list[
         float
     ]  # Annual inflation rates, as percentages (e.g., 0.02 for 2%)
 
-    @field_validator("stock_returns", "bond_returns", "inflation_rates")
+    @field_validator("stock_returns", "bond_returns", "cash_returns", "inflation_rates")
     @classmethod
     def validate_list_length(cls, v: list[float], info: ValidationInfo) -> list[float]:
         scenario_years = info.data.get("scenario_years")
@@ -50,6 +54,7 @@ class ScenarioModel(BaseModel):
                 year_index=i,
                 stock_return=self.stock_returns[i],
                 bond_return=self.bond_returns[i],
+                cash_return=self.cash_returns[i],
                 inflation_rate=self.inflation_rates[i],
                 cumulative_inflation=cumulative_inflation,
             )

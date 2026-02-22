@@ -39,11 +39,18 @@ class YearRecord:
     capital_gains_tax: float
     wealth_tax: float
     inflation_rate: float
-    real_portfolio_value: float  # portfolio value in year-0 dollars
-    real_gross_income: float  # gross income in year-0 dollars
-    real_net_income: float  # net income in year-0 dollars
-    real_capital_gains_tax: float  # capital gains tax in year-0 dollars
-    real_wealth_tax: float  # wealth tax in year-0 dollars
+    real_portfolio_value: float  # portfolio value in year-0 money
+    real_gross_income: float  # gross income in year-0 money
+    real_net_income: float  # net income in year-0 money
+    real_capital_gains_tax: float  # capital gains tax in year-0 money
+    real_wealth_tax: float  # wealth tax in year-0 money
+    stock_return: float = (
+        0.0  # stock return for the year, as a percentage (e.g., 0.07 for 7%)
+    )
+    bond_return: float = 0.0  # bond return for the year, as
+    cash_return: float = (
+        0.0  # cash return for the year, as a percentage (e.g., 0.01 for 1%)
+    )
 
     @property
     def total_tax(self) -> float:
@@ -109,6 +116,9 @@ class SimulationReport:
                 "real_net_income",
                 "real_capital_gains_tax",
                 "real_wealth_tax",
+                "stock_return",
+                "bond_return",
+                "cash_return",
             ]
         )
         for r in self.yearly_records:
@@ -126,6 +136,9 @@ class SimulationReport:
                     r.real_net_income,
                     r.real_capital_gains_tax,
                     r.real_wealth_tax,
+                    r.stock_return,
+                    r.bond_return,
+                    r.cash_return,
                 ]
             )
         return output.getvalue()
@@ -160,9 +173,9 @@ class ReportEngine:
 
         final = yearly_records[-1]
         # Goal is achieved if the portfolio never ran out (final value > 0)
-        # and every year the net income met or exceeded the target.
+        # and every year the gross income met or exceeded the target.
         goal_achieved = final.portfolio_value > 0 and all(
-            r.real_net_income >= (target_income - 1e-3) for r in yearly_records
+            r.real_gross_income >= (target_income - 1e-3) for r in yearly_records
         )
 
         return SimulationReport(

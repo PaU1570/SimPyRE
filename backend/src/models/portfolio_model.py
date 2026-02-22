@@ -2,7 +2,7 @@ from pydantic import BaseModel, field_validator, model_validator
 
 
 class Allocation(BaseModel):
-    """Asset allocation as percentages (0–1) that must sum to 1."""
+    """Asset allocation as percentages (0-1) that must sum to 1."""
 
     stocks: float
     bonds: float

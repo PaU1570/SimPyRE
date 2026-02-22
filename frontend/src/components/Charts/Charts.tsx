@@ -195,6 +195,106 @@ function fmtEurFull(n: number): string {
   return n.toLocaleString("en", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 }
 
+function fmtPct(n: number): string {
+  return `${(n * 100).toFixed(1)}%`;
+}
+
+/** Build median market-return bands per year (stock, bond, cash, inflation). */
+function buildMarketData(reports: SimulationReport[]) {
+  if (reports.length === 0) return [];
+  const maxYears = Math.max(...reports.map((r) => r.yearly_records.length));
+  const data: Array<Record<string, number>> = [];
+
+  for (let y = 0; y < maxYears; y++) {
+    const stocks = reports.map((r) => r.yearly_records[y]?.stock_return).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+    const bonds = reports.map((r) => r.yearly_records[y]?.bond_return).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+    const cash = reports.map((r) => r.yearly_records[y]?.cash_return).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+    const infl = reports.map((r) => r.yearly_records[y]?.inflation_rate).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+    if (stocks.length === 0) continue;
+
+    const medianInfl = pctile(infl, 0.5);
+    data.push({
+      year: y + 1,
+      stock: pctile(stocks, 0.5),
+      bond: pctile(bonds, 0.5),
+      cash: pctile(cash, 0.5),
+      inflation: medianInfl,
+      // percentile bands
+      stock_p10: pctile(stocks, 0.1), stock_p25: pctile(stocks, 0.25), stock_p75: pctile(stocks, 0.75), stock_p90: pctile(stocks, 0.9),
+      bond_p10: pctile(bonds, 0.1), bond_p25: pctile(bonds, 0.25), bond_p75: pctile(bonds, 0.75), bond_p90: pctile(bonds, 0.9),
+      cash_p10: pctile(cash, 0.1), cash_p90: pctile(cash, 0.9),
+      inflation_p10: pctile(infl, 0.1), inflation_p25: pctile(infl, 0.25), inflation_p75: pctile(infl, 0.75), inflation_p90: pctile(infl, 0.9),
+      // real = nominal − inflation (median)
+      real_stock: pctile(stocks, 0.5) - medianInfl,
+      real_bond: pctile(bonds, 0.5) - medianInfl,
+      real_cash: pctile(cash, 0.5) - medianInfl,
+      real_stock_p10: pctile(stocks, 0.1) - medianInfl, real_stock_p25: pctile(stocks, 0.25) - medianInfl,
+      real_stock_p75: pctile(stocks, 0.75) - medianInfl, real_stock_p90: pctile(stocks, 0.9) - medianInfl,
+      real_bond_p10: pctile(bonds, 0.1) - medianInfl, real_bond_p25: pctile(bonds, 0.25) - medianInfl,
+      real_bond_p75: pctile(bonds, 0.75) - medianInfl, real_bond_p90: pctile(bonds, 0.9) - medianInfl,
+      real_cash_p10: pctile(cash, 0.1) - medianInfl, real_cash_p90: pctile(cash, 0.9) - medianInfl,
+      real_inflation_p25: pctile(infl, 0.25) - medianInfl, real_inflation_p75: pctile(infl, 0.75) - medianInfl,
+    });
+  }
+  return data;
+}
+
+/** Custom tooltip for the Market Returns chart. */
+function MarketTooltipContent({
+  active,
+  payload,
+  label,
+  mode,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: Record<string, number> }>;
+  label?: number;
+  mode: "nominal" | "real";
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const d: Record<string, number> = payload[0]?.payload ?? {};
+  const p = mode === "real" ? "real_" : "";
+
+  type Row = { label: string; value: number; color: string; indent?: boolean };
+  const rows: Row[] = [
+    { label: "Stocks", value: d[`${p}stock`] ?? 0, color: "#3b82f6" },
+    { label: "  p75", value: d[`${p}stock_p75`] ?? 0, color: "#93bbfb", indent: true },
+    { label: "  p25", value: d[`${p}stock_p25`] ?? 0, color: "#93bbfb", indent: true },
+    { label: "Bonds", value: d[`${p}bond`] ?? 0, color: "#f59e0b" },
+    { label: "  p75", value: d[`${p}bond_p75`] ?? 0, color: "#fcd38d", indent: true },
+    { label: "  p25", value: d[`${p}bond_p25`] ?? 0, color: "#fcd38d", indent: true },
+  ];
+
+  if (mode === "nominal") {
+    rows.push(
+      { label: "Inflation", value: d.inflation ?? 0, color: "#ef4444" },
+      { label: "  p75", value: d.inflation_p75 ?? 0, color: "#fca5a5", indent: true },
+      { label: "  p25", value: d.inflation_p25 ?? 0, color: "#fca5a5", indent: true },
+    );
+  } else {
+    // In real mode show the inflation spread for context
+    rows.push(
+      { label: "Inflation spread", value: 0, color: "#ef4444" },
+      { label: "  p75", value: d.real_inflation_p75 ?? 0, color: "#fca5a5", indent: true },
+      { label: "  p25", value: d.real_inflation_p25 ?? 0, color: "#fca5a5", indent: true },
+    );
+  }
+
+  rows.push({ label: "Cash", value: d[`${p}cash`] ?? 0, color: "#8b5cf6" });
+
+  return (
+    <div className="rounded-md border border-gray-200 bg-white px-3 py-2 text-xs shadow-md">
+      <p className="mb-1 font-semibold text-gray-700">Year {label}</p>
+      {rows.map((r, i) => (
+        <div key={i} className={`flex justify-between gap-6${r.indent ? " pl-1 text-gray-500" : ""}`}>
+          <span style={{ color: r.indent ? r.color : r.color }}>{r.label}</span>
+          <span className="tabular-nums font-medium">{fmtPct(r.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Custom tooltip that shows Median first, then p75/p25, then p90/p10.
  *  Reads values from the underlying data row (payload[0].payload) so it
  *  works with stacked-area dataKeys that differ from the original keys. */
@@ -313,6 +413,7 @@ const histTooltipValue = (v: number) => [v, "Count"] as [number, string];
 // ── Component ────────────────────────────────────────────────────
 
 export default function Charts({ reports }: ChartsProps) {
+  const [marketMode, setMarketMode] = useState<"nominal" | "real">("nominal");
   const [portfolioMode, setPortfolioMode] = useState<"nominal" | "real">("nominal");
   const [incomeMode, setIncomeMode] = useState<"gross" | "net">("gross");
   const [incomeRealNom, setIncomeRealNom] = useState<"nominal" | "real">("nominal");
@@ -321,8 +422,37 @@ export default function Charts({ reports }: ChartsProps) {
   const [incomeHistRealNom, setIncomeHistRealNom] = useState<"nominal" | "real">("real");
 
   const bands = buildBands(reports);
+  const marketData = buildMarketData(reports);
 
   if (bands.length === 0) return null;
+
+  // ── Market data keys based on toggle ───────────────────────
+  const mPrefix = marketMode === "real" ? "real_" : "";
+  const mStockKey = `${mPrefix}stock`;
+  const mBondKey = `${mPrefix}bond`;
+  const mCashKey = `${mPrefix}cash`;
+  const mStockP10 = `${mPrefix}stock_p10`;
+  const mStockP90 = `${mPrefix}stock_p90`;
+  const mBondP10 = `${mPrefix}bond_p10`;
+  const mBondP90 = `${mPrefix}bond_p90`;
+
+  // ── Market Y-axis domain from p25/p75 ─────
+  const marketYDomain: [number, number] = (() => {
+    if (marketData.length === 0) return [-0.1, 0.1];
+    const keys25 = [`${mPrefix}stock_p25`, `${mPrefix}bond_p25`, `${mPrefix}cash`];
+    const keys75 = [`${mPrefix}stock_p75`, `${mPrefix}bond_p75`, `${mPrefix}cash`];
+    if (marketMode === "nominal") {
+      keys25.push("inflation_p25");
+      keys75.push("inflation_p75");
+    }
+    let lo = Infinity, hi = -Infinity;
+    for (const d of marketData) {
+      for (const k of keys25) { const v = d[k]; if (v !== undefined && v < lo) lo = v; }
+      for (const k of keys75) { const v = d[k]; if (v !== undefined && v > hi) hi = v; }
+    }
+    const pad = 0.01;
+    return [lo - pad, hi + pad];
+  })();
 
   // ── Fan chart keys based on toggle ─────────────────────────
   const fanKeys =
@@ -361,6 +491,50 @@ export default function Charts({ reports }: ChartsProps) {
 
   return (
     <div className="space-y-6">
+      {/* ── Market Returns ─────────────────────────────────────── */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-700">
+            Market Returns{marketMode === "real" ? " (Real)" : ""}
+          </h3>
+          <Toggle
+            options={[
+              { value: "nominal" as const, label: "Nominal" },
+              { value: "real" as const, label: "Real" },
+            ]}
+            value={marketMode}
+            onChange={setMarketMode}
+          />
+        </div>
+        <ResponsiveContainer width="100%" height={300}>
+          <ComposedChart data={marketData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="year" tick={{ fontSize: 11 }} label={{ value: "Year", position: "insideBottom", offset: -4, fontSize: 12 }} />
+            <YAxis tickFormatter={fmtPct} tick={{ fontSize: 11 }} width={55} domain={marketYDomain} allowDataOverflow />
+            <Tooltip content={<MarketTooltipContent mode={marketMode} />} />
+            <Legend verticalAlign="top" height={30} />
+
+            {/* p10–p90 shaded bands */}
+            <Area dataKey={mStockP10} stackId="_" fill="transparent" stroke="none" legendType="none" name="_s10" />
+            <Area dataKey={mStockP90} fill="#3b82f6" fillOpacity={0.08} stroke="none" legendType="none" name="_s90" />
+
+            <Area dataKey={mBondP10} stackId="_b" fill="transparent" stroke="none" legendType="none" name="_b10" />
+            <Area dataKey={mBondP90} fill="#f59e0b" fillOpacity={0.08} stroke="none" legendType="none" name="_b90" />
+
+            {/* Median lines */}
+            <Line dataKey={mStockKey} stroke="#3b82f6" strokeWidth={2} dot={false} name="Stocks" type="monotone" />
+            <Line dataKey={mBondKey} stroke="#f59e0b" strokeWidth={2} dot={false} name="Bonds" type="monotone" />
+            <Line dataKey={mCashKey} stroke="#8b5cf6" strokeWidth={2} dot={false} name="Cash" type="monotone" />
+            {marketMode === "nominal" && (
+              <Line dataKey="inflation" stroke="#ef4444" strokeWidth={2} strokeDasharray="6 3" dot={false} name="Inflation" type="monotone" />
+            )}
+
+            {/* Zero reference line */}
+            <Line dataKey={() => 0} stroke="#9ca3af" strokeWidth={1} strokeDasharray="4 4" dot={false} legendType="none" name="_zero" />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
       {/* ── Portfolio Fan Chart (toggled) ─────────────────────── */}
       <div>
         <div className="mb-2 flex items-center justify-between">

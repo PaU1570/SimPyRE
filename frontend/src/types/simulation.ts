@@ -25,6 +25,8 @@ export interface HistoricalScenarioConfig {
   country: string;
   chunk_years: number | null;
   shuffle: boolean;
+  randomize_start: boolean;
+  cash_return: number;
 }
 
 export interface MonteCarloScenarioConfig {
@@ -36,6 +38,7 @@ export interface MonteCarloScenarioConfig {
   std_bond_return: number;
   mean_inflation: number;
   std_inflation: number;
+  cash_return: number;
 }
 
 export type ScenarioConfig =
@@ -44,19 +47,35 @@ export type ScenarioConfig =
 
 // ── Strategy ──────────────────────────────────────────────────────
 
-export type StrategyType = "fixed_swr";
+export type StrategyType = "fixed_swr" | "constant_dollar" | "hebeler_autopilot_ii";
 
-export interface StrategyConfig {
-  strategy_type: StrategyType;
+export interface FixedSWRStrategyConfig {
+  strategy_type: "fixed_swr";
   withdrawal_rate: number;
   minimum_withdrawal: number;
 }
+
+export interface ConstantDollarStrategyConfig {
+  strategy_type: "constant_dollar";
+  withdrawal_amount: number;
+}
+
+export interface HebelerAutopilotIIConfig {
+  strategy_type: "hebeler_autopilot_ii";
+  initial_withdrawal_rate: number;
+  previous_withdrawal_weight: number;
+  payout_horizon: number;
+  minimum_withdrawal: number;
+}
+
+export type StrategyConfig = FixedSWRStrategyConfig | ConstantDollarStrategyConfig | HebelerAutopilotIIConfig;
 
 // ── Tax ───────────────────────────────────────────────────────────
 
 export interface TaxConfig {
   country: string;
   region: string;
+  adjust_brackets_with_inflation: boolean;
 }
 
 // ── Report ────────────────────────────────────────────────────────
@@ -72,6 +91,7 @@ export interface ReportConfig {
 
 export interface SimulationConfigPayload {
   initial_portfolio: PortfolioModel;
+  rebalance: boolean;
   scenario_config: ScenarioConfig;
   strategy_config: StrategyConfig;
   tax_config: TaxConfig;
@@ -95,6 +115,9 @@ export interface YearRecord {
   real_net_income: number;
   real_capital_gains_tax: number;
   real_wealth_tax: number;
+  stock_return: number;
+  bond_return: number;
+  cash_return: number;
 }
 
 export interface SimulationReport {
