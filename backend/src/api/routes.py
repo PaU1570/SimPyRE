@@ -7,10 +7,14 @@ this module only handles serialisation, error mapping, and CORS.
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import ValidationError
 
 from src.api.api import SimPyREAPI
@@ -32,13 +36,20 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
+    allow_origins=["http://localhost:5173", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 _api = SimPyREAPI()
+
+# ------------------------------------------------------------------ #
+# Static frontend (production build)
+# ------------------------------------------------------------------ #
+
+_STATIC_DIR = Path(__file__).resolve().parent.parent.parent / "static"
+
 
 # ------------------------------------------------------------------ #
 # Routes
@@ -115,3 +126,19 @@ def get_available_countries() -> dict[str, Any]:
         except Exception:
             countries[key] = {"error": "data not available"}
     return countries
+
+
+# ------------------------------------------------------------------ #
+# Serve frontend SPA (must be registered LAST)
+# ------------------------------------------------------------------ #
+
+if _STATIC_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=_STATIC_DIR / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str) -> FileResponse:
+        """Serve index.html for any non-API route (SPA client-side routing)."""
+        file = _STATIC_DIR / full_path
+        if file.is_file():
+            return FileResponse(file)
+        return FileResponse(_STATIC_DIR / "index.html")
