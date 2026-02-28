@@ -1,8 +1,16 @@
 import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
+import { useMemo } from "react";
 import SimulationPage from "@/pages/SimulationPage";
 import AccumulationPage from "@/pages/AccumulationPage";
 import CombinedPage from "@/pages/CombinedPage";
 import ResultsPage from "@/pages/ResultsPage";
+
+const LOGOS = [
+  "/logo/png/logo_gpt_1.png",
+  "/logo/png/logo_gpt_2.png",
+  "/logo/png/logo_gemini_1.png",
+  "/logo/png/logo_gemini_2.png",
+];
 
 const navLinkCls = ({ isActive }: { isActive: boolean }) =>
   `px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -12,15 +20,20 @@ const navLinkCls = ({ isActive }: { isActive: boolean }) =>
   }`;
 
 export default function App() {
+  const logo = useMemo(() => LOGOS[Math.floor(Math.random() * LOGOS.length)], []);
+
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50">
         {/* ── Header ───────────────────────────────────────── */}
         <header className="sticky top-0 z-10 border-b border-gray-200 bg-white/80 backdrop-blur">
           <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 lg:px-6">
-            <span className="text-lg font-bold tracking-tight text-primary-700">
-              SimPyRE
-            </span>
+            <div className="flex items-center gap-2">
+              <img src={logo} alt="SimPyRE logo" className="h-8 w-8 rounded" />
+              <span className="text-lg font-bold tracking-tight text-primary-700">
+                SimPyRE
+              </span>
+            </div>
             <nav className="flex items-center gap-1">
               <NavLink to="/accumulation" className={navLinkCls}>
                 Accumulation
