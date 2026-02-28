@@ -88,6 +88,54 @@ def run_simulation(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@app.post("/api/accumulate")
+def run_accumulation(payload: dict[str, Any]) -> dict[str, Any]:
+    """Run an accumulation (savings) simulation and return results."""
+    try:
+        result = _api.run_accumulation(payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {
+        "summary": result.summary(),
+        "reports": [r.to_dict() for r in result.reports],
+    }
+
+
+@app.post("/api/combined")
+def run_combined(payload: dict[str, Any]) -> dict[str, Any]:
+    """Run a combined accumulation + withdrawal simulation."""
+    try:
+        result = _api.run_combined(payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    num_sims = len(result.reports)
+    success_rate = (
+        sum(1 for r in result.reports if r.goal_achieved) / num_sims
+        if num_sims
+        else 0.0
+    )
+    total_years = len(result.reports[0].yearly_records) if result.reports else 0
+    acc_years = result.accumulation_result.config.simulation_years
+    ret_years = result.withdrawal_result.config.simulation_years
+
+    return {
+        "summary": {
+            "num_simulations": num_sims,
+            "success_rate": success_rate,
+            "simulation_years": total_years,
+            "accumulation_years": acc_years,
+            "retirement_years": ret_years,
+        },
+        "reports": [r.to_dict() for r in result.reports],
+    }
+
+
 @app.get("/api/tax-regions")
 def get_tax_regions() -> dict[str, Any]:
     """Return available tax countries/regions from the JSON file."""

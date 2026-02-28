@@ -7,7 +7,10 @@
 
 import type {
   SimulationConfigPayload,
+  AccumulationConfigPayload,
+  CombinedConfigPayload,
   SimulationResponse,
+  CombinedResponse,
   TaxRegionsResponse,
   CountriesResponse,
   ValidationResponse,
@@ -68,6 +71,26 @@ export async function fetchTaxRegions(): Promise<TaxRegionsResponse> {
 
 export async function fetchCountries(): Promise<CountriesResponse> {
   return request(`${BASE}/scenarios/countries`);
+}
+
+export async function runAccumulation(
+  payload: AccumulationConfigPayload,
+): Promise<SimulationResponse> {
+  return request(`${BASE}/accumulate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function runCombined(
+  payload: CombinedConfigPayload,
+): Promise<CombinedResponse> {
+  return request(`${BASE}/combined`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 export { ApiError };

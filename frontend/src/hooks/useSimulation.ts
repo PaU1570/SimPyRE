@@ -1,13 +1,18 @@
 import { useCallback, useState } from "react";
 import {
   runSimulation,
+  runAccumulation,
+  runCombined,
   fetchTaxRegions,
   fetchCountries,
   ApiError,
 } from "@/api/client";
 import type {
   SimulationConfigPayload,
+  AccumulationConfigPayload,
+  CombinedConfigPayload,
   SimulationResponse,
+  CombinedResponse,
   TaxRegionsResponse,
   CountriesResponse,
 } from "@/types/simulation";
@@ -93,4 +98,94 @@ export function useCountries() {
   }, [countries]);
 
   return { countries, loading, load };
+}
+
+// ── useAccumulation ──────────────────────────────────────────────
+
+interface UseAccumulationReturn {
+  data: SimulationResponse | null;
+  loading: boolean;
+  error: string | null;
+  run: (config: AccumulationConfigPayload) => Promise<void>;
+  reset: () => void;
+}
+
+export function useAccumulation(): UseAccumulationReturn {
+  const [data, setData] = useState<SimulationResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = useCallback(async (config: AccumulationConfigPayload) => {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const result = await runAccumulation(config);
+      setData(result);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const detail =
+          typeof err.body === "object" && err.body !== null && "detail" in err.body
+            ? JSON.stringify((err.body as { detail: unknown }).detail)
+            : String(err.body);
+        setError(`Validation error: ${detail}`);
+      } else {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const reset = useCallback(() => {
+    setData(null);
+    setError(null);
+  }, []);
+
+  return { data, loading, error, run, reset };
+}
+
+// ── useCombined ──────────────────────────────────────────────────
+
+interface UseCombinedReturn {
+  data: CombinedResponse | null;
+  loading: boolean;
+  error: string | null;
+  run: (config: CombinedConfigPayload) => Promise<void>;
+  reset: () => void;
+}
+
+export function useCombined(): UseCombinedReturn {
+  const [data, setData] = useState<CombinedResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const run = useCallback(async (config: CombinedConfigPayload) => {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const result = await runCombined(config);
+      setData(result);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const detail =
+          typeof err.body === "object" && err.body !== null && "detail" in err.body
+            ? JSON.stringify((err.body as { detail: unknown }).detail)
+            : String(err.body);
+        setError(`Validation error: ${detail}`);
+      } else {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const reset = useCallback(() => {
+    setData(null);
+    setError(null);
+  }, []);
+
+  return { data, loading, error, run, reset };
 }

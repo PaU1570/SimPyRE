@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from src.simulation_engine.simulation_engine import SimulationConfig
+    from src.simulation_engine.simulation_engine import WithdrawalConfig
 
 
 class OutputFormat(str, Enum):
@@ -30,27 +30,38 @@ class ReportConfig(BaseModel):
 
 @dataclass
 class YearRecord:
-    """One year of simulation data."""
+    """One year of simulation data.
+
+    Fields used by *withdrawal* simulations:
+        gross_income / net_income / real_gross_income / real_net_income
+
+    Fields used by *accumulation* simulations:
+        contribution / real_contribution
+
+    The unused fields default to 0 so both modes share the same record.
+    """
 
     year: int
     portfolio_value: float
-    gross_income: float
-    net_income: float
-    capital_gains_tax: float
-    wealth_tax: float
-    inflation_rate: float
-    real_portfolio_value: float  # portfolio value in year-0 money
-    real_gross_income: float  # gross income in year-0 money
-    real_net_income: float  # net income in year-0 money
-    real_capital_gains_tax: float  # capital gains tax in year-0 money
-    real_wealth_tax: float  # wealth tax in year-0 money
-    stock_return: float = (
-        0.0  # stock return for the year, as a percentage (e.g., 0.07 for 7%)
-    )
-    bond_return: float = 0.0  # bond return for the year, as
-    cash_return: float = (
-        0.0  # cash return for the year, as a percentage (e.g., 0.01 for 1%)
-    )
+    # -- withdrawal fields --
+    gross_income: float = 0.0
+    net_income: float = 0.0
+    # -- accumulation fields --
+    contribution: float = 0.0  # nominal annual contribution
+    real_contribution: float = 0.0  # contribution in year-0 money
+    # -- tax --
+    capital_gains_tax: float = 0.0
+    wealth_tax: float = 0.0
+    # -- market --
+    inflation_rate: float = 0.0
+    real_portfolio_value: float = 0.0  # portfolio value in year-0 money
+    real_gross_income: float = 0.0  # gross income in year-0 money
+    real_net_income: float = 0.0  # net income in year-0 money
+    real_capital_gains_tax: float = 0.0  # capital gains tax in year-0 money
+    real_wealth_tax: float = 0.0  # wealth tax in year-0 money
+    stock_return: float = 0.0
+    bond_return: float = 0.0
+    cash_return: float = 0.0
 
     @property
     def total_tax(self) -> float:
@@ -65,6 +76,7 @@ class SimulationReport:
     goal_achieved: bool = False
     final_portfolio_value: float = 0.0
     final_real_portfolio_value: float = 0.0
+    years_to_target: int | None = None
 
     # ------------------------------------------------------------------ #
     # Output methods
@@ -108,12 +120,14 @@ class SimulationReport:
                 "portfolio_value",
                 "gross_income",
                 "net_income",
+                "contribution",
                 "capital_gains_tax",
                 "wealth_tax",
                 "inflation_rate",
                 "real_portfolio_value",
                 "real_gross_income",
                 "real_net_income",
+                "real_contribution",
                 "real_capital_gains_tax",
                 "real_wealth_tax",
                 "stock_return",
@@ -128,12 +142,14 @@ class SimulationReport:
                     r.portfolio_value,
                     r.gross_income,
                     r.net_income,
+                    r.contribution,
                     r.capital_gains_tax,
                     r.wealth_tax,
                     r.inflation_rate,
                     r.real_portfolio_value,
                     r.real_gross_income,
                     r.real_net_income,
+                    r.real_contribution,
                     r.real_capital_gains_tax,
                     r.real_wealth_tax,
                     r.stock_return,
@@ -149,6 +165,7 @@ class SimulationReport:
             "goal_achieved": self.goal_achieved,
             "final_portfolio_value": self.final_portfolio_value,
             "final_real_portfolio_value": self.final_real_portfolio_value,
+            "years_to_target": self.years_to_target,
             "yearly_records": [asdict(r) for r in self.yearly_records],
         }
 
@@ -159,7 +176,7 @@ class ReportEngine:
     @staticmethod
     def generate_report(
         yearly_records: list[YearRecord],
-        target_income: float,
+        goal_achieved: bool,
     ) -> SimulationReport:
         """
         Construct a SimulationReport.
@@ -171,16 +188,9 @@ class ReportEngine:
         if not yearly_records:
             return SimulationReport()
 
-        final = yearly_records[-1]
-        # Goal is achieved if the portfolio never ran out (final value > 0)
-        # and every year the gross income met or exceeded the target.
-        goal_achieved = final.portfolio_value > 0 and all(
-            r.real_gross_income >= (target_income - 1e-3) for r in yearly_records
-        )
-
         return SimulationReport(
             yearly_records=yearly_records,
             goal_achieved=goal_achieved,
-            final_portfolio_value=final.portfolio_value,
-            final_real_portfolio_value=final.real_portfolio_value,
+            final_portfolio_value=yearly_records[-1].portfolio_value,
+            final_real_portfolio_value=yearly_records[-1].real_portfolio_value,
         )

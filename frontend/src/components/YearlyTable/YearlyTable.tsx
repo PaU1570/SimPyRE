@@ -8,11 +8,14 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
-import type { YearRecord } from "@/types/simulation";
+import type { YearRecord, SimulationMode } from "@/types/simulation";
 
 interface YearlyTableProps {
   records: YearRecord[];
+  mode?: SimulationMode;
+  accumulationYears?: number;
 }
 
 function fmtPct(n: number): string {
@@ -29,7 +32,7 @@ function fmtEurFull(n: number): string {
   return n.toLocaleString("en", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 }
 
-export default function YearlyTable({ records }: YearlyTableProps) {
+export default function YearlyTable({ records, mode = "withdrawal", accumulationYears }: YearlyTableProps) {
   const [expanded, setExpanded] = useState(false);
   const [realMode, setRealMode] = useState(false);
   const display = expanded ? records : records.slice(0, 10);
@@ -84,6 +87,9 @@ export default function YearlyTable({ records }: YearlyTableProps) {
             {!realMode && (
               <Line dataKey="inflation" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="6 3" dot={false} name="Inflation" type="monotone" />
             )}
+            {accumulationYears != null && (
+              <ReferenceLine x={accumulationYears} stroke="#ef4444" strokeWidth={1.5} strokeDasharray="6 3" />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -108,14 +114,17 @@ export default function YearlyTable({ records }: YearlyTableProps) {
             {!realMode && (
               <Line dataKey="real_portfolio_value" stroke="#16a34a" strokeWidth={1.5} strokeDasharray="6 3" dot={false} name="Real Portfolio" type="monotone" />
             )}
+            {accumulationYears != null && (
+              <ReferenceLine x={accumulationYears} stroke="#ef4444" strokeWidth={1.5} strokeDasharray="6 3" />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* ── Income Chart ─────────────────────────────────────── */}
+      {/* ── Income / Contribution Chart ────────────────────── */}
       <div>
         <h4 className="mb-1 text-xs font-medium text-gray-500">
-          Yearly Income{realMode ? " (Real)" : ""}
+          {mode === "accumulation" ? "Yearly Contribution" : mode === "combined" ? "Yearly Cash Flow" : "Yearly Income"}{realMode ? " (Real)" : ""}
         </h4>
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={records}>
@@ -128,8 +137,18 @@ export default function YearlyTable({ records }: YearlyTableProps) {
               contentStyle={{ fontSize: 11 }}
             />
             <Legend verticalAlign="top" height={24} wrapperStyle={{ fontSize: 11 }} />
-            <Line dataKey={realMode ? "real_gross_income" : "gross_income"} stroke="#d97706" strokeWidth={1.5} dot={false} name="Gross" type="monotone" />
-            <Line dataKey={realMode ? "real_net_income" : "net_income"} stroke="#16a34a" strokeWidth={1.5} dot={false} name="Net" type="monotone" />
+            {(mode === "accumulation" || mode === "combined") && (
+              <Line dataKey={realMode ? "real_contribution" : "contribution"} stroke="#2563eb" strokeWidth={1.5} dot={false} name="Contribution" type="monotone" />
+            )}
+            {(mode === "withdrawal" || mode === "combined") && (
+              <Line dataKey={realMode ? "real_gross_income" : "gross_income"} stroke="#d97706" strokeWidth={1.5} dot={false} name="Gross" type="monotone" />
+            )}
+            {(mode === "withdrawal" || mode === "combined") && (
+              <Line dataKey={realMode ? "real_net_income" : "net_income"} stroke="#16a34a" strokeWidth={1.5} dot={false} name="Net" type="monotone" />
+            )}
+            {accumulationYears != null && (
+              <ReferenceLine x={accumulationYears} stroke="#ef4444" strokeWidth={1.5} strokeDasharray="6 3" />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -140,9 +159,18 @@ export default function YearlyTable({ records }: YearlyTableProps) {
             <tr>
               <Th>Year</Th>
               <Th>Portfolio</Th>
-              <Th>Gross Inc.</Th>
-              <Th>Net Inc.</Th>
-              <Th>CG Tax</Th>
+              {(mode === "accumulation" || mode === "combined") && (
+                <Th>Contribution</Th>
+              )}
+              {(mode === "withdrawal" || mode === "combined") && (
+                <Th>Gross Inc.</Th>
+              )}
+              {(mode === "withdrawal" || mode === "combined") && (
+                <Th>Net Inc.</Th>
+              )}
+              {(mode === "withdrawal" || mode === "combined") && (
+                <Th>CG Tax</Th>
+              )}
               <Th>Wealth Tax</Th>
               <Th>Inflation</Th>
               {!realMode && <Th>Real Portfolio</Th>}
@@ -153,9 +181,18 @@ export default function YearlyTable({ records }: YearlyTableProps) {
               <tr key={r.year} className="hover:bg-gray-50/50">
                 <Td>{r.year}</Td>
                 <Td>{eur(realMode ? r.real_portfolio_value : r.portfolio_value)}</Td>
-                <Td>{eur(realMode ? r.real_gross_income : r.gross_income)}</Td>
-                <Td>{eur(realMode ? r.real_net_income : r.net_income)}</Td>
-                <Td>{eur(realMode ? r.real_capital_gains_tax : r.capital_gains_tax)} ({taxPct(realMode ? r.real_capital_gains_tax : r.capital_gains_tax, realMode ? r.real_gross_income : r.gross_income)})</Td>
+                {(mode === "accumulation" || mode === "combined") && (
+                  <Td>{eur(realMode ? r.real_contribution : r.contribution)}</Td>
+                )}
+                {(mode === "withdrawal" || mode === "combined") && (
+                  <Td>{eur(realMode ? r.real_gross_income : r.gross_income)}</Td>
+                )}
+                {(mode === "withdrawal" || mode === "combined") && (
+                  <Td>{eur(realMode ? r.real_net_income : r.net_income)}</Td>
+                )}
+                {(mode === "withdrawal" || mode === "combined") && (
+                  <Td>{eur(realMode ? r.real_capital_gains_tax : r.capital_gains_tax)} ({taxPct(realMode ? r.real_capital_gains_tax : r.capital_gains_tax, realMode ? r.real_gross_income : r.gross_income)})</Td>
+                )}
                 <Td>{eur(realMode ? r.real_wealth_tax : r.wealth_tax)} ({taxPct(realMode ? r.real_wealth_tax : r.wealth_tax, realMode ? r.real_portfolio_value : r.portfolio_value)})</Td>
                 <Td>{pct(r.inflation_rate)}</Td>
                 {!realMode && <Td>{eur(r.real_portfolio_value)}</Td>}

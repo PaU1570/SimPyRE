@@ -100,15 +100,45 @@ export interface SimulationConfigPayload {
   num_simulations: number;
 }
 
+// ── Accumulation config (maps to AccumulationConfig) ─────────────
+
+export interface AccumulationConfigPayload {
+  monthly_savings: number;
+  annual_increase: number;
+  target_value: number;
+  initial_portfolio: PortfolioModel;
+  rebalance: boolean;
+  scenario_config: ScenarioConfig;
+  tax_config: TaxConfig;
+  report_config?: ReportConfig;
+  simulation_years: number;
+  num_simulations: number;
+}
+
+// ── Combined config (maps to CombinedConfig) ─────────────────────
+
+export interface CombinedConfigPayload {
+  accumulation_config: AccumulationConfigPayload;
+  withdrawal_config: SimulationConfigPayload;
+  scenario_config: ScenarioConfig;
+  num_simulations: number;
+}
+
 // ── Response types ───────────────────────────────────────────────
 
 export interface YearRecord {
   year: number;
   portfolio_value: number;
+  // withdrawal fields
   gross_income: number;
   net_income: number;
+  // accumulation fields
+  contribution: number;
+  real_contribution: number;
+  // tax
   capital_gains_tax: number;
   wealth_tax: number;
+  // market
   inflation_rate: number;
   real_portfolio_value: number;
   real_gross_income: number;
@@ -119,6 +149,8 @@ export interface YearRecord {
   bond_return: number;
   cash_return: number;
 }
+
+export type SimulationMode = "withdrawal" | "accumulation" | "combined";
 
 export interface SimulationReport {
   goal_achieved: boolean;
@@ -131,10 +163,21 @@ export interface SimulationSummary {
   num_simulations: number;
   success_rate: number;
   simulation_years: number;
+  median_time_to_target?: number | null;
 }
 
 export interface SimulationResponse {
   summary: SimulationSummary;
+  reports: SimulationReport[];
+}
+
+export interface CombinedSummary extends SimulationSummary {
+  accumulation_years: number;
+  retirement_years: number;
+}
+
+export interface CombinedResponse {
+  summary: CombinedSummary;
   reports: SimulationReport[];
 }
 

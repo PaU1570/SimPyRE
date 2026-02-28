@@ -13,11 +13,14 @@ import {
   BarChart,
   Bar,
   Cell,
+  ReferenceLine,
 } from "recharts";
-import type { SimulationReport } from "@/types/simulation";
+import type { SimulationReport, SimulationMode } from "@/types/simulation";
 
 interface ChartsProps {
   reports: SimulationReport[];
+  mode?: SimulationMode;
+  accumulationYears?: number;
 }
 
 // ── Toggle Button ────────────────────────────────────────────────
@@ -53,7 +56,7 @@ function Toggle<T extends string>({
 // ── Helpers ──────────────────────────────────────────────────────
 
 /** Build percentile bands per year. */
-function buildBands(reports: SimulationReport[]) {
+function buildBands(reports: SimulationReport[], mode: SimulationMode = "withdrawal") {
   if (reports.length === 0) return [];
 
   const maxYears = Math.max(...reports.map((r) => r.yearly_records.length));
@@ -98,10 +101,10 @@ function buildBands(reports: SimulationReport[]) {
   for (let y = 0; y < maxYears; y++) {
     const vals = reports.map((r) => r.yearly_records[y]?.portfolio_value).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
     const realVals = reports.map((r) => r.yearly_records[y]?.real_portfolio_value).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
-    const grossVals = reports.map((r) => r.yearly_records[y]?.gross_income).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
-    const netVals = reports.map((r) => r.yearly_records[y]?.net_income).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
-    const rGrossVals = reports.map((r) => r.yearly_records[y]?.real_gross_income).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
-    const rNetVals = reports.map((r) => r.yearly_records[y]?.real_net_income).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+    const grossVals = reports.map((r) => { const rec = r.yearly_records[y]; if (!rec) return undefined; if (mode === "accumulation") return rec.contribution; if (mode === "combined") return rec.contribution + rec.gross_income; return rec.gross_income; }).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+    const netVals = reports.map((r) => { const rec = r.yearly_records[y]; if (!rec) return undefined; if (mode === "accumulation") return rec.contribution; if (mode === "combined") return rec.contribution + rec.net_income; return rec.net_income; }).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+    const rGrossVals = reports.map((r) => { const rec = r.yearly_records[y]; if (!rec) return undefined; if (mode === "accumulation") return rec.real_contribution; if (mode === "combined") return rec.real_contribution + rec.real_gross_income; return rec.real_gross_income; }).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+    const rNetVals = reports.map((r) => { const rec = r.yearly_records[y]; if (!rec) return undefined; if (mode === "accumulation") return rec.real_contribution; if (mode === "combined") return rec.real_contribution + rec.real_net_income; return rec.real_net_income; }).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
 
     if (vals.length === 0) continue;
 
@@ -353,6 +356,7 @@ function PortfolioFanChart({
   accentColor = "#2563eb",
   lightFill = "#bfdbfe",
   darkFill = "#60a5fa",
+  accumulationYears,
 }: {
   data: Array<Record<string, number>>;
   medianKey: string;
@@ -363,6 +367,7 @@ function PortfolioFanChart({
   accentColor?: string;
   lightFill?: string;
   darkFill?: string;
+  accumulationYears?: number;
 }) {
   // Compute stacked band heights so we don't need white masks
   const stackedData = data.map((d) => ({
@@ -396,6 +401,9 @@ function PortfolioFanChart({
 
         {/* Median line (not stacked) */}
         <Line dataKey={medianKey} stroke={accentColor} strokeWidth={2} dot={false} name="Median" type="monotone" />
+        {accumulationYears != null && (
+          <ReferenceLine x={accumulationYears} stroke="#ef4444" strokeWidth={1.5} strokeDasharray="6 3" label={{ value: "Retirement", position: "top", fill: "#ef4444", fontSize: 10 }} />
+        )}
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -412,7 +420,7 @@ const histTooltipValue = (v: number) => [v, "Count"] as [number, string];
 
 // ── Component ────────────────────────────────────────────────────
 
-export default function Charts({ reports }: ChartsProps) {
+export default function Charts({ reports, mode = "withdrawal", accumulationYears }: ChartsProps) {
   const [marketMode, setMarketMode] = useState<"nominal" | "real">("nominal");
   const [portfolioMode, setPortfolioMode] = useState<"nominal" | "real">("nominal");
   const [incomeMode, setIncomeMode] = useState<"gross" | "net">("gross");
@@ -421,7 +429,7 @@ export default function Charts({ reports }: ChartsProps) {
   const [incomeHistMode, setIncomeHistMode] = useState<"gross" | "net">("net");
   const [incomeHistRealNom, setIncomeHistRealNom] = useState<"nominal" | "real">("real");
 
-  const bands = buildBands(reports);
+  const bands = buildBands(reports, mode);
   const marketData = buildMarketData(reports);
 
   if (bands.length === 0) return null;
@@ -474,10 +482,10 @@ export default function Charts({ reports }: ChartsProps) {
   // ── Histogram data (real values, €5k bins) ─────────────────
   const finalNominal = reports.map((r) => r.final_portfolio_value);
   const finalReal = reports.map((r) => r.final_real_portfolio_value);
-  const allGross = reports.flatMap((r) => r.yearly_records.map((y) => y.gross_income));
-  const allNet = reports.flatMap((r) => r.yearly_records.map((y) => y.net_income));
-  const allRealGross = reports.flatMap((r) => r.yearly_records.map((y) => y.real_gross_income));
-  const allRealNet = reports.flatMap((r) => r.yearly_records.map((y) => y.real_net_income));
+  const allGross = reports.flatMap((r) => r.yearly_records.map((y) => mode === "accumulation" ? y.contribution : mode === "combined" ? y.contribution + y.gross_income : y.gross_income));
+  const allNet = reports.flatMap((r) => r.yearly_records.map((y) => mode === "accumulation" ? y.contribution : mode === "combined" ? y.contribution + y.net_income : y.net_income));
+  const allRealGross = reports.flatMap((r) => r.yearly_records.map((y) => mode === "accumulation" ? y.real_contribution : mode === "combined" ? y.real_contribution + y.real_gross_income : y.real_gross_income));
+  const allRealNet = reports.flatMap((r) => r.yearly_records.map((y) => mode === "accumulation" ? y.real_contribution : mode === "combined" ? y.real_contribution + y.real_net_income : y.real_net_income));
 
   const histPortfolio = buildHistogram250k(portfolioHistMode === "nominal" ? finalNominal : finalReal);
   const incomeHistValues =
@@ -531,6 +539,9 @@ export default function Charts({ reports }: ChartsProps) {
 
             {/* Zero reference line */}
             <Line dataKey={() => 0} stroke="#9ca3af" strokeWidth={1} strokeDasharray="4 4" dot={false} legendType="none" name="_zero" />
+            {accumulationYears != null && (
+              <ReferenceLine x={accumulationYears} stroke="#ef4444" strokeWidth={1.5} strokeDasharray="6 3" label={{ value: "Retirement", position: "top", fill: "#ef4444", fontSize: 10 }} />
+            )}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -550,7 +561,7 @@ export default function Charts({ reports }: ChartsProps) {
             onChange={setPortfolioMode}
           />
         </div>
-        <PortfolioFanChart data={bands} {...fanKeys} />
+        <PortfolioFanChart data={bands} {...fanKeys} accumulationYears={accumulationYears} />
       </div>
 
       {/* ── Median Portfolio: Nominal vs Real ─────────────────── */}
@@ -568,25 +579,34 @@ export default function Charts({ reports }: ChartsProps) {
 
             <Line dataKey="median" stroke="#2563eb" strokeWidth={2} dot={false} name="Nominal" type="monotone" />
             <Line dataKey="median_real" stroke="#16a34a" strokeWidth={2} strokeDasharray="6 3" dot={false} name="Real (inflation-adj.)" type="monotone" />
+            {accumulationYears != null && (
+              <ReferenceLine x={accumulationYears} stroke="#ef4444" strokeWidth={1.5} strokeDasharray="6 3" label={{ value: "Retirement", position: "top", fill: "#ef4444", fontSize: 10 }} />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>
 
-      {/* ── Income Over Time (toggled gross/net) ──────────────── */}
+      {/* ── Income / Contribution Over Time ───────────────────── */}
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-700">
-            Income Over Time – {incomeMode === "gross" ? "Gross" : "Net"}{incomeRealNom === "real" ? " (Real)" : ""}
+            {mode === "accumulation"
+              ? `Contribution Over Time${incomeRealNom === "real" ? " (Real)" : ""}`
+              : mode === "combined"
+                ? `Cash Flow Over Time – ${incomeMode === "gross" ? "Gross" : "Net"}${incomeRealNom === "real" ? " (Real)" : ""}`
+                : `Income Over Time – ${incomeMode === "gross" ? "Gross" : "Net"}${incomeRealNom === "real" ? " (Real)" : ""}`}
           </h3>
           <div className="flex gap-2">
-            <Toggle
-              options={[
-                { value: "gross" as const, label: "Gross" },
-                { value: "net" as const, label: "Net" },
-              ]}
-              value={incomeMode}
-              onChange={setIncomeMode}
-            />
+            {mode !== "accumulation" && (
+              <Toggle
+                options={[
+                  { value: "gross" as const, label: "Gross" },
+                  { value: "net" as const, label: "Net" },
+                ]}
+                value={incomeMode}
+                onChange={setIncomeMode}
+              />
+            )}
             <Toggle
               options={[
                 { value: "nominal" as const, label: "Nominal" },
@@ -600,9 +620,10 @@ export default function Charts({ reports }: ChartsProps) {
         <PortfolioFanChart
           data={bands}
           {...incomeKeys}
-          accentColor={incomeColor}
-          lightFill={incomeMode === "gross" ? "#fde68a" : "#bbf7d0"}
-          darkFill={incomeMode === "gross" ? "#f59e0b" : "#4ade80"}
+          accentColor={mode === "accumulation" ? "#2563eb" : incomeColor}
+          lightFill={mode === "accumulation" ? "#bfdbfe" : incomeMode === "gross" ? "#fde68a" : "#bbf7d0"}
+          darkFill={mode === "accumulation" ? "#60a5fa" : incomeMode === "gross" ? "#f59e0b" : "#4ade80"}
+          accumulationYears={accumulationYears}
         />
       </div>
 
@@ -636,21 +657,27 @@ export default function Charts({ reports }: ChartsProps) {
         </ResponsiveContainer>
       </div>
 
-      {/* ── Histogram: Yearly Income ──────────────────────────── */}
+      {/* ── Histogram: Yearly Income / Contribution ───────────── */}
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-700">
-            Distribution of Yearly Income – {incomeHistMode === "gross" ? "Gross" : "Net"}{incomeHistRealNom === "real" ? " (Real)" : ""}
+            {mode === "accumulation"
+              ? `Distribution of Yearly Contribution${incomeHistRealNom === "real" ? " (Real)" : ""}`
+              : mode === "combined"
+                ? `Distribution of Yearly Cash Flow – ${incomeHistMode === "gross" ? "Gross" : "Net"}${incomeHistRealNom === "real" ? " (Real)" : ""}`
+                : `Distribution of Yearly Income – ${incomeHistMode === "gross" ? "Gross" : "Net"}${incomeHistRealNom === "real" ? " (Real)" : ""}`}
           </h3>
           <div className="flex gap-2">
-            <Toggle
-              options={[
-                { value: "gross" as const, label: "Gross" },
-                { value: "net" as const, label: "Net" },
-              ]}
-              value={incomeHistMode}
-              onChange={setIncomeHistMode}
-            />
+            {mode !== "accumulation" && (
+              <Toggle
+                options={[
+                  { value: "gross" as const, label: "Gross" },
+                  { value: "net" as const, label: "Net" },
+                ]}
+                value={incomeHistMode}
+                onChange={setIncomeHistMode}
+              />
+            )}
             <Toggle
               options={[
                 { value: "nominal" as const, label: "Nominal" },
