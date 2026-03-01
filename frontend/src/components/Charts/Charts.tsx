@@ -212,6 +212,7 @@ function buildMarketData(reports: SimulationReport[]) {
     const stocks = reports.map((r) => r.yearly_records[y]?.stock_return).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
     const bonds = reports.map((r) => r.yearly_records[y]?.bond_return).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
     const cash = reports.map((r) => r.yearly_records[y]?.cash_return).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+    const combined = reports.map((r) => r.yearly_records[y]?.combined_return).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
     const infl = reports.map((r) => r.yearly_records[y]?.inflation_rate).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
     if (stocks.length === 0) continue;
 
@@ -221,20 +222,26 @@ function buildMarketData(reports: SimulationReport[]) {
       stock: pctile(stocks, 0.5),
       bond: pctile(bonds, 0.5),
       cash: pctile(cash, 0.5),
+      combined: combined.length > 0 ? pctile(combined, 0.5) : 0,
       inflation: medianInfl,
       // percentile bands
       stock_p10: pctile(stocks, 0.1), stock_p25: pctile(stocks, 0.25), stock_p75: pctile(stocks, 0.75), stock_p90: pctile(stocks, 0.9),
       bond_p10: pctile(bonds, 0.1), bond_p25: pctile(bonds, 0.25), bond_p75: pctile(bonds, 0.75), bond_p90: pctile(bonds, 0.9),
+      combined_p10: combined.length > 0 ? pctile(combined, 0.1) : 0, combined_p25: combined.length > 0 ? pctile(combined, 0.25) : 0,
+      combined_p75: combined.length > 0 ? pctile(combined, 0.75) : 0, combined_p90: combined.length > 0 ? pctile(combined, 0.9) : 0,
       cash_p10: pctile(cash, 0.1), cash_p90: pctile(cash, 0.9),
       inflation_p10: pctile(infl, 0.1), inflation_p25: pctile(infl, 0.25), inflation_p75: pctile(infl, 0.75), inflation_p90: pctile(infl, 0.9),
       // real = nominal − inflation (median)
       real_stock: pctile(stocks, 0.5) - medianInfl,
       real_bond: pctile(bonds, 0.5) - medianInfl,
       real_cash: pctile(cash, 0.5) - medianInfl,
+      real_combined: combined.length > 0 ? pctile(combined, 0.5) - medianInfl : 0,
       real_stock_p10: pctile(stocks, 0.1) - medianInfl, real_stock_p25: pctile(stocks, 0.25) - medianInfl,
       real_stock_p75: pctile(stocks, 0.75) - medianInfl, real_stock_p90: pctile(stocks, 0.9) - medianInfl,
       real_bond_p10: pctile(bonds, 0.1) - medianInfl, real_bond_p25: pctile(bonds, 0.25) - medianInfl,
       real_bond_p75: pctile(bonds, 0.75) - medianInfl, real_bond_p90: pctile(bonds, 0.9) - medianInfl,
+      real_combined_p10: combined.length > 0 ? pctile(combined, 0.1) - medianInfl : 0, real_combined_p25: combined.length > 0 ? pctile(combined, 0.25) - medianInfl : 0,
+      real_combined_p75: combined.length > 0 ? pctile(combined, 0.75) - medianInfl : 0, real_combined_p90: combined.length > 0 ? pctile(combined, 0.9) - medianInfl : 0,
       real_cash_p10: pctile(cash, 0.1) - medianInfl, real_cash_p90: pctile(cash, 0.9) - medianInfl,
       real_inflation_p25: pctile(infl, 0.25) - medianInfl, real_inflation_p75: pctile(infl, 0.75) - medianInfl,
     });
@@ -260,6 +267,9 @@ function MarketTooltipContent({
 
   type Row = { label: string; value: number; color: string; indent?: boolean };
   const rows: Row[] = [
+    { label: "Combined", value: d[`${p}combined`] ?? 0, color: "#10b981" },
+    { label: "  p75", value: d[`${p}combined_p75`] ?? 0, color: "#6ee7b7", indent: true },
+    { label: "  p25", value: d[`${p}combined_p25`] ?? 0, color: "#6ee7b7", indent: true },
     { label: "Stocks", value: d[`${p}stock`] ?? 0, color: "#3b82f6" },
     { label: "  p75", value: d[`${p}stock_p75`] ?? 0, color: "#93bbfb", indent: true },
     { label: "  p25", value: d[`${p}stock_p25`] ?? 0, color: "#93bbfb", indent: true },
@@ -443,12 +453,15 @@ export default function Charts({ reports, mode = "withdrawal", accumulationYears
   const mStockP90 = `${mPrefix}stock_p90`;
   const mBondP10 = `${mPrefix}bond_p10`;
   const mBondP90 = `${mPrefix}bond_p90`;
+  const mCombinedKey = `${mPrefix}combined`;
+  const mCombinedP10 = `${mPrefix}combined_p10`;
+  const mCombinedP90 = `${mPrefix}combined_p90`;
 
   // ── Market Y-axis domain from p25/p75 ─────
   const marketYDomain: [number, number] = (() => {
     if (marketData.length === 0) return [-0.1, 0.1];
-    const keys25 = [`${mPrefix}stock_p25`, `${mPrefix}bond_p25`, `${mPrefix}cash`];
-    const keys75 = [`${mPrefix}stock_p75`, `${mPrefix}bond_p75`, `${mPrefix}cash`];
+    const keys25 = [`${mPrefix}stock_p25`, `${mPrefix}bond_p25`, `${mPrefix}combined_p25`, `${mPrefix}cash`];
+    const keys75 = [`${mPrefix}stock_p75`, `${mPrefix}bond_p75`, `${mPrefix}combined_p75`, `${mPrefix}cash`];
     if (marketMode === "nominal") {
       keys25.push("inflation_p25");
       keys75.push("inflation_p75");
@@ -529,7 +542,11 @@ export default function Charts({ reports, mode = "withdrawal", accumulationYears
             <Area dataKey={mBondP10} stackId="_b" fill="transparent" stroke="none" legendType="none" name="_b10" />
             <Area dataKey={mBondP90} fill="#f59e0b" fillOpacity={0.08} stroke="none" legendType="none" name="_b90" />
 
+            <Area dataKey={mCombinedP10} stackId="_c" fill="transparent" stroke="none" legendType="none" name="_c10" />
+            <Area dataKey={mCombinedP90} fill="#10b981" fillOpacity={0.08} stroke="none" legendType="none" name="_c90" />
+
             {/* Median lines */}
+            <Line dataKey={mCombinedKey} stroke="#10b981" strokeWidth={2.5} dot={false} name="Combined" type="monotone" />
             <Line dataKey={mStockKey} stroke="#3b82f6" strokeWidth={2} dot={false} name="Stocks" type="monotone" />
             <Line dataKey={mBondKey} stroke="#f59e0b" strokeWidth={2} dot={false} name="Bonds" type="monotone" />
             <Line dataKey={mCashKey} stroke="#8b5cf6" strokeWidth={2} dot={false} name="Cash" type="monotone" />

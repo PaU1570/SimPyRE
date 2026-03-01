@@ -43,10 +43,12 @@ export default function YearlyTable({ records, mode = "withdrawal", accumulation
     stock: r.stock_return,
     bond: r.bond_return,
     cash: r.cash_return,
+    combined: r.combined_return,
     inflation: r.inflation_rate,
     real_stock: r.stock_return - r.inflation_rate,
     real_bond: r.bond_return - r.inflation_rate,
     real_cash: r.cash_return - r.inflation_rate,
+    real_combined: r.combined_return - r.inflation_rate,
   }));
 
   const pfx = realMode ? "real_" : "";
@@ -81,6 +83,7 @@ export default function YearlyTable({ records, mode = "withdrawal", accumulation
               contentStyle={{ fontSize: 11 }}
             />
             <Legend verticalAlign="top" height={24} wrapperStyle={{ fontSize: 11 }} />
+            <Line dataKey={`${pfx}combined`} stroke="#10b981" strokeWidth={2} dot={false} name="Combined" type="monotone" />
             <Line dataKey={`${pfx}stock`} stroke="#3b82f6" strokeWidth={1.5} dot={false} name="Stocks" type="monotone" />
             <Line dataKey={`${pfx}bond`} stroke="#f59e0b" strokeWidth={1.5} dot={false} name="Bonds" type="monotone" />
             <Line dataKey={`${pfx}cash`} stroke="#8b5cf6" strokeWidth={1.5} dot={false} name="Cash" type="monotone" />
@@ -159,6 +162,9 @@ export default function YearlyTable({ records, mode = "withdrawal", accumulation
             <tr>
               <Th>Year</Th>
               <Th>Portfolio</Th>
+              <Th>Allocation</Th>
+              <Th>Return</Th>
+              <Th>Inflation</Th>
               {(mode === "accumulation" || mode === "combined") && (
                 <Th>Contribution</Th>
               )}
@@ -172,15 +178,31 @@ export default function YearlyTable({ records, mode = "withdrawal", accumulation
                 <Th>CG Tax</Th>
               )}
               <Th>Wealth Tax</Th>
-              <Th>Inflation</Th>
               {!realMode && <Th>Real Portfolio</Th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {display.map((r) => (
-              <tr key={r.year} className="hover:bg-gray-50/50">
+              <tr key={r.year} className={r.goal_achieved ? "hover:bg-gray-50/50" : "bg-red-50 hover:bg-red-100"}>
                 <Td>{r.year}</Td>
                 <Td>{eur(realMode ? r.real_portfolio_value : r.portfolio_value)}</Td>
+                <Td>
+                  <div className="flex flex-col leading-tight">
+                    {Object.entries(r.portfolio_allocation)
+                      .filter(([, v]) => v > 0)
+                      .map(([k, v]) => {
+                        const abs = v * (realMode ? r.real_portfolio_value : r.portfolio_value);
+                        return (
+                          <span key={k}>
+                            {k[0]!.toUpperCase() + k.slice(1)} {(v * 100).toFixed(0)}%{" "}
+                            <span className="text-gray-400">{fmtEur(abs)}</span>
+                          </span>
+                        );
+                      })}
+                  </div>
+                </Td>
+                <Td>{pct(r.combined_return)}</Td>
+                <Td>{pct(r.inflation_rate)}</Td>
                 {(mode === "accumulation" || mode === "combined") && (
                   <Td>{eur(realMode ? r.real_contribution : r.contribution)}</Td>
                 )}
@@ -194,7 +216,6 @@ export default function YearlyTable({ records, mode = "withdrawal", accumulation
                   <Td>{eur(realMode ? r.real_capital_gains_tax : r.capital_gains_tax)} ({taxPct(realMode ? r.real_capital_gains_tax : r.capital_gains_tax, realMode ? r.real_gross_income : r.gross_income)})</Td>
                 )}
                 <Td>{eur(realMode ? r.real_wealth_tax : r.wealth_tax)} ({taxPct(realMode ? r.real_wealth_tax : r.wealth_tax, realMode ? r.real_portfolio_value : r.portfolio_value)})</Td>
-                <Td>{pct(r.inflation_rate)}</Td>
                 {!realMode && <Td>{eur(r.real_portfolio_value)}</Td>}
               </tr>
             ))}

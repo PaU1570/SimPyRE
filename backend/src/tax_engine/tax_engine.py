@@ -30,6 +30,7 @@ class TaxResult:
     net_income: float
     capital_gains_tax: float
     wealth_tax: float
+    wealth_tax_included_in_net_income: bool
 
     @property
     def total_tax(self) -> float:
@@ -55,6 +56,7 @@ class TaxEngine(ABC):
         gross_income: float,
         wealth: float,
         cumulative_inflation: float | None = None,
+        deduct_wealth_tax_from_gross_income: bool = False,
     ) -> TaxResult:
         """
         Calculate the tax for a given amount and tax rate.
@@ -62,6 +64,7 @@ class TaxEngine(ABC):
         :param gross_income: The gross income to calculate tax on.
         :param wealth: The wealth to calculate tax on.
         :param cumulative_inflation: Optional cumulative inflation factor to adjust brackets. Only used if ``adjust_brackets_with_inflation`` is True in config.
+        :param deduct_wealth_tax_from_gross_income: Whether to include wealth tax in the net income calculation. If False, the caller must make sure to deduct it from the portfolio value separately. This is useful in cases where the wealth tax exceeds or is close to the gross income.
         :return: The calculated tax result.
         """
         pass
@@ -73,12 +76,17 @@ class TaxEngine(ABC):
         tolerance: float = 1e-2,
         max_iter: int = 100,
         cumulative_inflation: float | None = None,
+        deduct_wealth_tax_from_gross_income: bool = False,
     ) -> TaxResult:
         """
         Calculate the reverse tax for a given net income and tax rate.
 
         :param net_income: The net income to calculate reverse tax on.
         :param wealth: The wealth to calculate tax on.
+        :param tolerance: The tolerance for convergence of the reverse tax calculation.
+        :param max_iter: The maximum number of iterations for the reverse tax calculation.
+        :param cumulative_inflation: Optional cumulative inflation factor to adjust brackets. Only used if ``adjust_brackets_with_inflation`` is True in config.
+        :param deduct_wealth_tax_from_gross_income: Whether to include wealth tax in the net income calculation.
         :return: The calculated reverse tax result.
         """
         # Initial guess for gross income
@@ -88,7 +96,12 @@ class TaxEngine(ABC):
         iteration = 0
 
         while iteration < max_iter:
-            tax_result = self.calculate_tax(gross_income, wealth, cumulative_inflation)
+            tax_result = self.calculate_tax(
+                gross_income,
+                wealth,
+                cumulative_inflation,
+                deduct_wealth_tax_from_gross_income,
+            )
             if abs(tax_result.net_income - net_income) <= tolerance:
                 logger.debug(f"Converged after {iteration} iterations.")
                 return tax_result
@@ -160,6 +173,7 @@ class NoTaxEngine(TaxEngine):
         gross_income: float,
         wealth: float,
         cumulative_inflation: float | None = None,
+        deduct_wealth_tax_from_gross_income: bool = False,
     ) -> TaxResult:
         return TaxResult(
             wealth=wealth,
@@ -167,6 +181,7 @@ class NoTaxEngine(TaxEngine):
             net_income=gross_income,
             capital_gains_tax=0.0,
             wealth_tax=0.0,
+            wealth_tax_included_in_net_income=deduct_wealth_tax_from_gross_income,
         )
 
 
@@ -209,6 +224,7 @@ class SpainTaxEngine(TaxEngine):
         gross_income: float,
         wealth: float,
         cumulative_inflation: float | None = None,
+        deduct_wealth_tax_from_gross_income: bool = False,
     ) -> TaxResult:
         # Adjust brackets for inflation if configured
         if (
@@ -253,7 +269,11 @@ class SpainTaxEngine(TaxEngine):
                 wealth_tax * (1 - self.wealth_tax_cap.get("discount_limit_pct", 0.0)),
             )
 
-        net_income = gross_income - capital_gains_tax - wealth_tax
+        net_income = (
+            gross_income - capital_gains_tax - wealth_tax
+            if deduct_wealth_tax_from_gross_income
+            else gross_income - capital_gains_tax
+        )
 
         return TaxResult(
             wealth=wealth,
@@ -261,6 +281,7 @@ class SpainTaxEngine(TaxEngine):
             net_income=net_income,
             capital_gains_tax=capital_gains_tax,
             wealth_tax=wealth_tax,
+            wealth_tax_included_in_net_income=deduct_wealth_tax_from_gross_income,
         )
 
 

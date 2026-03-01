@@ -43,6 +43,7 @@ class YearRecord:
 
     year: int
     portfolio_value: float
+    portfolio_allocation: dict[str, float] = field(default_factory=dict)
     # -- withdrawal fields --
     gross_income: float = 0.0
     net_income: float = 0.0
@@ -62,6 +63,9 @@ class YearRecord:
     stock_return: float = 0.0
     bond_return: float = 0.0
     cash_return: float = 0.0
+    combined_return: float = 0.0
+    # -- reporting --
+    goal_achieved: bool = False
 
     @property
     def total_tax(self) -> float:

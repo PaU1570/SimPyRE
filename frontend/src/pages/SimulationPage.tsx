@@ -3,11 +3,35 @@ import ConfigForm from "@/components/ConfigForm";
 import ResultsPanel from "@/components/ResultsPanel";
 import Charts from "@/components/Charts";
 import YearlyTable from "@/components/YearlyTable";
+import StrategyComparison from "@/components/StrategyComparison";
+import OverviewTable from "@/components/OverviewTable";
 import {
   useSimulation,
   useTaxRegions,
   useCountries,
 } from "@/hooks/useSimulation";
+
+const STRATEGY_LABELS: Record<string, string> = {
+  fixed_swr: "Fixed SWR",
+  constant_dollar: "Constant Dollar",
+  hebeler_autopilot_ii: "Hebeler Autopilot II",
+  cash_buffer: "Cash Buffer",
+};
+
+const STRATEGY_COLORS = [
+  "#2563eb",
+  "#d97706",
+  "#059669",
+  "#7c3aed",
+];
+
+/** Normalise strategy type strings coming from the backend. */
+function normalizeStrategyType(raw: string): string {
+  return raw.replace(/^StrategyType\./i, "").toLowerCase();
+}
+function strategyLabel(raw: string): string {
+  return STRATEGY_LABELS[normalizeStrategyType(raw)] ?? raw;
+}
 
 /**
  * Main simulation page – side-by-side layout.
@@ -27,7 +51,27 @@ export default function SimulationPage() {
 
   // Which simulation run to inspect in the table (for multi-run)
   const [selectedRun, setSelectedRun] = useState(0);
-  const report = sim.data?.reports[selectedRun];
+
+  // Which strategy to drill into (null = show comparison overview)
+  const [selectedStrategy, setSelectedStrategy] = useState<number | null>(null);
+
+  // Reset selections when new data arrives
+  useEffect(() => {
+    setSelectedRun(0);
+    setSelectedStrategy(null);
+  }, [sim.data]);
+
+  const isCompare =
+    (sim.data?.all_strategy_reports?.length ?? 0) > 1 &&
+    (sim.data?.summary.strategy_summaries?.length ?? 0) > 1;
+
+  // Active reports depend on whether we're drilling into a specific strategy
+  const activeReports =
+    isCompare && selectedStrategy != null
+      ? sim.data!.all_strategy_reports![selectedStrategy]!
+      : sim.data?.reports ?? [];
+
+  const report = activeReports[selectedRun];
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)] flex-col lg:flex-row gap-6 p-4 lg:p-6">
@@ -81,39 +125,111 @@ export default function SimulationPage() {
         {/* Results */}
         {sim.data && (
           <>
-            {/* Summary cards */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <ResultsPanel data={sim.data} />
-            </div>
-
-            {/* Charts */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <Charts reports={sim.data.reports} />
-            </div>
-
-            {/* Run selector + yearly table */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
-              {sim.data.reports.length > 1 && (
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-medium text-gray-600">
-                    Inspect run:
-                  </label>
-                  <select
-                    className="rounded border border-gray-300 bg-white px-2 py-1 text-xs"
-                    value={selectedRun}
-                    onChange={(e) => setSelectedRun(Number(e.target.value))}
+            {/* ── Strategy selector tabs (compare mode) ────── */}
+            {isCompare && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    selectedStrategy === null
+                      ? "bg-gray-800 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                  onClick={() => setSelectedStrategy(null)}
+                >
+                  Overview
+                </button>
+                {sim.data.summary.strategy_summaries!.map((s, i) => (
+                  <button
+                    key={i}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      selectedStrategy === i
+                        ? "text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                    style={
+                      selectedStrategy === i
+                        ? { backgroundColor: STRATEGY_COLORS[i % STRATEGY_COLORS.length] }
+                        : undefined
+                    }
+                    onClick={() => setSelectedStrategy(i)}
                   >
-                    {sim.data.reports.map((r, i) => (
-                      <option key={i} value={i}>
-                        Run {i + 1}
-                        {r.goal_achieved ? " ✓" : " ✗"}
-                      </option>
-                    ))}
-                  </select>
+                    {strategyLabel(s.strategy_type)}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* ── OVERVIEW MODE (multi-strategy, none selected) ── */}
+            {isCompare && selectedStrategy === null && (
+              <>
+                {/* Comparison panel: summary table + overlay charts */}
+                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <StrategyComparison
+                    data={sim.data}
+                    onSelectStrategy={(i) => setSelectedStrategy(i)}
+                  />
                 </div>
-              )}
-              {report && <YearlyTable records={report.yearly_records} />}
-            </div>
+
+                {/* Combined year-by-year table across all strategies */}
+                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <OverviewTable
+                    allReports={sim.data.all_strategy_reports!}
+                    summaries={sim.data.summary.strategy_summaries!}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* ── SINGLE STRATEGY / DRILLED-IN VIEW ────────── */}
+            {(!isCompare || selectedStrategy != null) && (
+              <>
+                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <ResultsPanel
+                    data={
+                      isCompare && selectedStrategy != null
+                        ? {
+                            summary: {
+                              ...sim.data.summary,
+                              success_rate:
+                                sim.data.summary.strategy_summaries![selectedStrategy]!.success_rate,
+                              num_simulations:
+                                sim.data.summary.strategy_summaries![selectedStrategy]!.num_simulations,
+                            },
+                            reports: activeReports,
+                          }
+                        : sim.data
+                    }
+                  />
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <Charts reports={activeReports} />
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-3">
+                  {activeReports.length > 1 && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-gray-600">
+                        Inspect run:
+                      </label>
+                      <select
+                        className="rounded border border-gray-300 bg-white px-2 py-1 text-xs"
+                        value={selectedRun}
+                        onChange={(e) => setSelectedRun(Number(e.target.value))}
+                      >
+                        {activeReports.map((r, i) => (
+                          <option key={i} value={i}>
+                            Run {i + 1}
+                            {r.goal_achieved ? " ✓" : " ✗"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {report && <YearlyTable records={report.yearly_records} />}
+                </div>
+              </>
+            )}
           </>
         )}
       </main>

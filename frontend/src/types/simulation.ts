@@ -47,12 +47,13 @@ export type ScenarioConfig =
 
 // ── Strategy ──────────────────────────────────────────────────────
 
-export type StrategyType = "fixed_swr" | "constant_dollar" | "hebeler_autopilot_ii";
+export type StrategyType = "fixed_swr" | "constant_dollar" | "hebeler_autopilot_ii" | "cash_buffer";
 
 export interface FixedSWRStrategyConfig {
   strategy_type: "fixed_swr";
   withdrawal_rate: number;
   minimum_withdrawal: number;
+  maximum_withdrawal: number;
 }
 
 export interface ConstantDollarStrategyConfig {
@@ -68,7 +69,16 @@ export interface HebelerAutopilotIIConfig {
   minimum_withdrawal: number;
 }
 
-export type StrategyConfig = FixedSWRStrategyConfig | ConstantDollarStrategyConfig | HebelerAutopilotIIConfig;
+export interface CashBufferStrategyConfig {
+  strategy_type: "cash_buffer";
+  withdrawal_rate_buffer: number;
+  subsistence_withdrawal: number;
+  standard_withdrawal: number;
+  maximum_withdrawal: number;
+  buffer_target: number;
+}
+
+export type StrategyConfig = FixedSWRStrategyConfig | ConstantDollarStrategyConfig | HebelerAutopilotIIConfig | CashBufferStrategyConfig;
 
 // ── Tax ───────────────────────────────────────────────────────────
 
@@ -93,7 +103,8 @@ export interface SimulationConfigPayload {
   initial_portfolio: PortfolioModel;
   rebalance: boolean;
   scenario_config: ScenarioConfig;
-  strategy_config: StrategyConfig;
+  strategy_config?: StrategyConfig;    // single strategy (backward compat)
+  strategy_configs?: StrategyConfig[]; // multiple strategies to compare
   tax_config: TaxConfig;
   report_config?: ReportConfig;
   simulation_years: number;
@@ -129,6 +140,7 @@ export interface CombinedConfigPayload {
 export interface YearRecord {
   year: number;
   portfolio_value: number;
+  portfolio_allocation: Record<string, number>;
   // withdrawal fields
   gross_income: number;
   net_income: number;
@@ -148,6 +160,8 @@ export interface YearRecord {
   stock_return: number;
   bond_return: number;
   cash_return: number;
+  combined_return: number;
+  goal_achieved: boolean;
 }
 
 export type SimulationMode = "withdrawal" | "accumulation" | "combined";
@@ -159,16 +173,25 @@ export interface SimulationReport {
   yearly_records: YearRecord[];
 }
 
+export interface StrategySummary {
+  strategy_index: number;
+  strategy_type: string;
+  success_rate: number;
+  num_simulations: number;
+}
+
 export interface SimulationSummary {
   num_simulations: number;
   success_rate: number;
   simulation_years: number;
   median_time_to_target?: number | null;
+  strategy_summaries?: StrategySummary[];
 }
 
 export interface SimulationResponse {
   summary: SimulationSummary;
   reports: SimulationReport[];
+  all_strategy_reports?: SimulationReport[][]; // present when comparing strategies
 }
 
 export interface CombinedSummary extends SimulationSummary {

@@ -2,10 +2,13 @@ import { useEffect, useState } from "react";
 import type {
   SimulationConfigPayload,
   ScenarioConfig,
-  StrategyType,
+  StrategyConfig,
   TaxRegionsResponse,
   CountriesResponse,
 } from "@/types/simulation";
+import StrategyFields, { defaultStrategyConfig } from "./StrategyFields";
+
+const STRATEGY_COLORS = ["#2563eb", "#d97706", "#059669", "#7c3aed"];
 
 // ── Defaults ─────────────────────────────────────────────────────
 
@@ -28,6 +31,7 @@ const DEFAULT_CONFIG: SimulationConfigPayload = {
     strategy_type: "fixed_swr" as const,
     withdrawal_rate: 0.04,
     minimum_withdrawal: 30000,
+    maximum_withdrawal: Infinity,
   },
   tax_config: {
     country: "spain",
@@ -56,6 +60,11 @@ export default function ConfigForm({
   countries,
 }: ConfigFormProps) {
   const [config, setConfig] = useState<SimulationConfigPayload>(DEFAULT_CONFIG);
+
+  // Strategy list – always at least one; no separate "compare" toggle needed.
+  const [strategies, setStrategies] = useState<StrategyConfig[]>([
+    DEFAULT_CONFIG.strategy_config!,
+  ]);
 
   // Keep scenario_years in sync with simulation_years
   useEffect(() => {
@@ -89,7 +98,14 @@ export default function ConfigForm({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    onSubmit(config);
+    if (strategies.length > 1) {
+      // Send strategy_configs (plural) for multi-strategy comparison
+      const { strategy_config: _primary, ...rest } = config;
+      onSubmit({ ...rest, strategy_configs: strategies });
+    } else {
+      // Single strategy – send strategy_config (singular)
+      onSubmit({ ...config, strategy_config: strategies[0] });
+    }
   }
 
   const scenarioType = config.scenario_config.scenario_type;
@@ -364,153 +380,62 @@ export default function ConfigForm({
 
       {/* ── Strategy ──────────────────────────────────────────── */}
       <Section title="Withdrawal Strategy">
-        <Field label="Strategy">
-          <select
-            className={inputCls}
-            value={config.strategy_config.strategy_type}
-            onChange={(e) => {
-              const st = e.target.value as StrategyType;
-              if (st === "constant_dollar") {
-                set("strategy_config", {
-                  strategy_type: "constant_dollar",
-                  withdrawal_amount: 40000,
-                });
-              } else if (st === "hebeler_autopilot_ii") {
-                set("strategy_config", {
-                  strategy_type: "hebeler_autopilot_ii",
-                  initial_withdrawal_rate: 0.04,
-                  previous_withdrawal_weight: 0.75,
-                  payout_horizon: 50,
-                  minimum_withdrawal: 30000,
-                });
-              } else {
-                set("strategy_config", {
-                  strategy_type: "fixed_swr",
-                  withdrawal_rate: 0.04,
-                  minimum_withdrawal: 30000,
-                });
-              }
-            }}
+        {/* Strategy cards – uniform styling for all */}
+        {strategies.map((strat, idx) => (
+          <div
+            key={idx}
+            className="rounded-lg border border-gray-200 bg-gray-50/60 p-3 space-y-2"
           >
-            <option value="fixed_swr">Fixed SWR</option>
-            <option value="constant_dollar">Constant Dollar</option>
-            <option value="hebeler_autopilot_ii">Hebeler Autopilot II</option>
-          </select>
-        </Field>
-        {config.strategy_config.strategy_type === "fixed_swr" && (() => {
-          const sc = config.strategy_config;
-          return (
-            <>
-              <Field label="Withdrawal rate">
-                <input
-                  type="number"
-                  className={inputCls}
-                  min={0}
-                  max={1}
-                  step={0.005}
-                  value={sc.withdrawal_rate}
-                  onChange={(e) =>
-                    set("strategy_config", {
-                      strategy_type: "fixed_swr" as const,
-                      withdrawal_rate: Number(e.target.value),
-                      minimum_withdrawal: sc.minimum_withdrawal,
-                    })
+            <div className="flex items-center justify-between">
+              <p
+                className="text-[10px] font-semibold uppercase tracking-wider"
+                style={{
+                  color: STRATEGY_COLORS[idx % STRATEGY_COLORS.length],
+                }}
+              >
+                Strategy {idx + 1}
+              </p>
+              {strategies.length > 1 && (
+                <button
+                  type="button"
+                  className="text-xs text-red-500 hover:text-red-700"
+                  onClick={() =>
+                    setStrategies((prev) =>
+                      prev.filter((_, i) => i !== idx),
+                    )
                   }
-                />
-              </Field>
-              <Field label="Min. withdrawal (€)">
-                <input
-                  type="number"
-                  className={inputCls}
-                  min={0}
-                  step={1000}
-                  value={sc.minimum_withdrawal}
-                  onChange={(e) =>
-                    set("strategy_config", {
-                      strategy_type: "fixed_swr" as const,
-                      withdrawal_rate: sc.withdrawal_rate,
-                      minimum_withdrawal: Number(e.target.value),
-                    })
-                  }
-                />
-              </Field>
-            </>
-          );
-        })()}
-        {config.strategy_config.strategy_type === "constant_dollar" && (
-          <Field label="Withdrawal amount (€)">
-            <input
-              type="number"
-              className={inputCls}
-              min={0}
-              step={1000}
-              value={config.strategy_config.withdrawal_amount}
-              onChange={(e) =>
-                set("strategy_config", {
-                  strategy_type: "constant_dollar" as const,
-                  withdrawal_amount: Number(e.target.value),
-                })
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            <StrategyFields
+              value={strat}
+              onChange={(v) =>
+                setStrategies((prev) =>
+                  prev.map((s, i) => (i === idx ? v : s)),
+                )
               }
+              inputCls={inputCls}
             />
-          </Field>
+          </div>
+        ))}
+
+        {/* Add strategy button – always visible */}
+        {strategies.length < 4 && (
+          <button
+            type="button"
+            className="mt-1 w-full rounded-md border border-dashed border-gray-300 py-1.5 text-xs font-medium text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors"
+            onClick={() =>
+              setStrategies((prev) => [
+                ...prev,
+                defaultStrategyConfig("constant_dollar"),
+              ])
+            }
+          >
+            + Add strategy to compare
+          </button>
         )}
-        {config.strategy_config.strategy_type === "hebeler_autopilot_ii" && (() => {
-          const sc = config.strategy_config;
-          return (
-            <>
-              <Field label="Initial withdrawal rate">
-                <input
-                  type="number"
-                  className={inputCls}
-                  min={0}
-                  max={1}
-                  step={0.005}
-                  value={sc.initial_withdrawal_rate}
-                  onChange={(e) =>
-                    set("strategy_config", { ...sc, initial_withdrawal_rate: Number(e.target.value) })
-                  }
-                />
-              </Field>
-              <Field label="Prev. withdrawal weight">
-                <input
-                  type="number"
-                  className={inputCls}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={sc.previous_withdrawal_weight}
-                  onChange={(e) =>
-                    set("strategy_config", { ...sc, previous_withdrawal_weight: Number(e.target.value) })
-                  }
-                />
-              </Field>
-              <Field label="Payout horizon (yrs)">
-                <input
-                  type="number"
-                  className={inputCls}
-                  min={1}
-                  step={1}
-                  value={sc.payout_horizon}
-                  onChange={(e) =>
-                    set("strategy_config", { ...sc, payout_horizon: Number(e.target.value) })
-                  }
-                />
-              </Field>
-              <Field label="Min. withdrawal (€)">
-                <input
-                  type="number"
-                  className={inputCls}
-                  min={0}
-                  step={1000}
-                  value={sc.minimum_withdrawal}
-                  onChange={(e) =>
-                    set("strategy_config", { ...sc, minimum_withdrawal: Number(e.target.value) })
-                  }
-                />
-              </Field>
-            </>
-          );
-        })()}
       </Section>
 
       {/* ── Tax ───────────────────────────────────────────────── */}

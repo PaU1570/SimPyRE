@@ -82,10 +82,16 @@ def run_simulation(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(exc))
 
     # Build a JSON-friendly response
-    return {
+    response: dict[str, Any] = {
         "summary": result.summary(),
         "reports": [r.to_dict() for r in result.reports],
     }
+    # Include per-strategy reports when comparing multiple strategies
+    if len(result.all_strategy_reports) > 1:
+        response["all_strategy_reports"] = [
+            [r.to_dict() for r in reports] for reports in result.all_strategy_reports
+        ]
+    return response
 
 
 @app.post("/api/accumulate")

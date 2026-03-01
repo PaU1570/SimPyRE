@@ -82,11 +82,11 @@ export default function ResultsPanel({ data, mode = "withdrawal", accumulationYe
   const rNetP90 = pctile(allRealNet, 0.9);
 
   // ── Failure analysis ──────────────────────────────────────
-  // For failed simulations, find the year the portfolio first hit ~0
+  // Use the per-year goal_achieved flag set by the backend
   const failedReports = reports.filter((r) => !r.goal_achieved);
   const failureYears = failedReports.map((r) => {
-    const idx = r.yearly_records.findIndex((y) => y.portfolio_value < 1);
-    return idx >= 0 ? r.yearly_records[idx]!.year : r.yearly_records.length;
+    const rec = r.yearly_records.find((y) => !y.goal_achieved);
+    return rec ? rec.year : r.yearly_records[r.yearly_records.length - 1]!.year;
   });
   const sortedFailureYears = [...failureYears].sort((a, b) => a - b);
   const earliestFailure = sortedFailureYears[0] ?? null;

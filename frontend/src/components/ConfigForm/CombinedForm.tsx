@@ -32,6 +32,7 @@ const DEFAULT_STRATEGY: StrategyConfig = {
   strategy_type: "fixed_swr" as const,
   withdrawal_rate: 0.04,
   minimum_withdrawal: 30_000,
+  maximum_withdrawal: Infinity,
 };
 
 // ── Props ────────────────────────────────────────────────────────
@@ -168,13 +169,15 @@ export default function CombinedForm({
         <Field label="Type">
           <select className={inputCls} value={strategy.strategy_type} onChange={(e) => {
             const st = e.target.value as StrategyType;
-            if (st === "fixed_swr") setStrategy({ strategy_type: "fixed_swr", withdrawal_rate: 0.04, minimum_withdrawal: 30_000 });
+            if (st === "fixed_swr") setStrategy({ strategy_type: "fixed_swr", withdrawal_rate: 0.04, minimum_withdrawal: 30_000, maximum_withdrawal: Infinity });
             else if (st === "constant_dollar") setStrategy({ strategy_type: "constant_dollar", withdrawal_amount: 60_000 });
+            else if (st === "cash_buffer") setStrategy({ strategy_type: "cash_buffer", withdrawal_rate_buffer: 0.01, subsistence_withdrawal: 20_000, standard_withdrawal: 40_000, maximum_withdrawal: 60_000, buffer_target: 100_000 });
             else setStrategy({ strategy_type: "hebeler_autopilot_ii", initial_withdrawal_rate: 0.04, previous_withdrawal_weight: 0.6, payout_horizon: 30, minimum_withdrawal: 30_000 });
           }}>
             <option value="fixed_swr">Fixed SWR</option>
             <option value="constant_dollar">Constant Dollar</option>
             <option value="hebeler_autopilot_ii">Hebeler Autopilot II</option>
+            <option value="cash_buffer">Cash Buffer</option>
           </select>
         </Field>
 
@@ -183,10 +186,13 @@ export default function CombinedForm({
           return (
             <>
               <Field label="Withdrawal rate">
-                <input type="number" className={inputCls} step={0.005} min={0} max={1} value={sc.withdrawal_rate} onChange={(e) => setStrategy({ strategy_type: "fixed_swr" as const, withdrawal_rate: Number(e.target.value), minimum_withdrawal: sc.minimum_withdrawal })} />
+                <input type="number" className={inputCls} step={0.005} min={0} max={1} value={sc.withdrawal_rate} onChange={(e) => setStrategy({ ...sc, withdrawal_rate: Number(e.target.value) })} />
               </Field>
               <Field label="Minimum withdrawal (€)">
-                <input type="number" className={inputCls} step={1000} min={0} value={sc.minimum_withdrawal} onChange={(e) => setStrategy({ strategy_type: "fixed_swr" as const, withdrawal_rate: sc.withdrawal_rate, minimum_withdrawal: Number(e.target.value) })} />
+                <input type="number" className={inputCls} step={1000} min={0} value={sc.minimum_withdrawal} onChange={(e) => setStrategy({ ...sc, minimum_withdrawal: Number(e.target.value) })} />
+              </Field>
+              <Field label="Maximum withdrawal (€)">
+                <input type="number" className={inputCls} step={1000} min={0} value={sc.maximum_withdrawal === Infinity ? "" : sc.maximum_withdrawal} placeholder="∞ (no limit)" onChange={(e) => setStrategy({ ...sc, maximum_withdrawal: e.target.value === "" ? Infinity : Number(e.target.value) })} />
               </Field>
             </>
           );
@@ -211,6 +217,28 @@ export default function CombinedForm({
               </Field>
               <Field label="Minimum withdrawal (€)">
                 <input type="number" className={inputCls} step={1000} min={0} value={sc.minimum_withdrawal} onChange={(e) => setStrategy({ ...sc, minimum_withdrawal: Number(e.target.value) })} />
+              </Field>
+            </>
+          );
+        })()}
+        {strategy.strategy_type === "cash_buffer" && (() => {
+          const sc = strategy;
+          return (
+            <>
+              <Field label="WR buffer (rate)">
+                <input type="number" className={inputCls} step={0.005} min={0} max={1} value={sc.withdrawal_rate_buffer} onChange={(e) => setStrategy({ ...sc, withdrawal_rate_buffer: Number(e.target.value) })} />
+              </Field>
+              <Field label="Subsistence (€)">
+                <input type="number" className={inputCls} step={1000} min={0} value={sc.subsistence_withdrawal} onChange={(e) => setStrategy({ ...sc, subsistence_withdrawal: Number(e.target.value) })} />
+              </Field>
+              <Field label="Standard (€)">
+                <input type="number" className={inputCls} step={1000} min={0} value={sc.standard_withdrawal} onChange={(e) => setStrategy({ ...sc, standard_withdrawal: Number(e.target.value) })} />
+              </Field>
+              <Field label="Maximum (€)">
+                <input type="number" className={inputCls} step={1000} min={0} value={sc.maximum_withdrawal} onChange={(e) => setStrategy({ ...sc, maximum_withdrawal: Number(e.target.value) })} />
+              </Field>
+              <Field label="Buffer target (€)">
+                <input type="number" className={inputCls} step={10000} min={0} value={sc.buffer_target} onChange={(e) => setStrategy({ ...sc, buffer_target: Number(e.target.value) })} />
               </Field>
             </>
           );
